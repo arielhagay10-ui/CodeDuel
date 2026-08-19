@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: codewars
+      POSTGRES_USER: codewars
+      POSTGRES_PASSWORD: codewars_local_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - codewars_postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codewars -d codewars"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  judge-runner:
+    build: ./judge-worker/runner
+    image: codewars-judge-runner:latest
+    entrypoint: ["true"]
+    network_mode: none
+    read_only: true
+
+  judge-worker:
+    build: ./judge-worker
+    # The orchestrator needs Docker-socket access; untrusted submissions run separately as UID 10001.
+    user: "0:0"
+    environment:
+      DATABASE_URL: postgresql://codewars:codewars_local_only@db:5432/codewars
+      JUDGE_RUNNER_IMAGE: codewars-judge-runner:latest
+    volumes:
+      # Local-only bridge to launch ephemeral runner containers. Never expose externally.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      judge-runner:
+        condition: service_completed_successfully
+
+volumes:
+  codewars_postgres_data:
