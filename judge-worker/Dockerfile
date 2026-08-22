@@ -7,6 +7,7 @@ RUN useradd --system --uid 10001 --create-home judge
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY --from=docker_cli /usr/local/bin/docker /usr/local/bin/docker
-COPY worker.py rating.py .
+COPY worker.py rating.py verify_seed.py .
+COPY runner/run_tests.py runner/run_tests.py
 USER judge
 CMD ["python", "-u", "worker.py"]

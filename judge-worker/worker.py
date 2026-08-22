@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 from rating import Rating, update_rating, visible_rank
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-RUNNER_IMAGE = os.getenv("JUDGE_RUNNER_IMAGE", "codewars-judge-runner:latest")
+RUNNER_IMAGE = os.getenv("JUDGE_RUNNER_IMAGE", "codeduel-judge-runner:latest")
 WORKER_ID = os.getenv("HOSTNAME", f"judge-{uuid.uuid4()}")
 POLL_SECONDS = float(os.getenv("JUDGE_POLL_SECONDS", "1"))
 
@@ -52,8 +52,13 @@ def execute(submission):
     except subprocess.TimeoutExpired:
         return {"verdict": "time_limit_exceeded", "tests_passed": 0, "tests_total": len(submission["tests"])}
     if result.returncode != 0:
-        return {"verdict": "internal_error", "tests_passed": 0, "tests_total": len(submission["tests"])}
-    return json.loads(result.stdout)
+        raise RuntimeError(f"runner container exited {result.returncode}: {result.stderr.strip()[:1500]!r}")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            f"runner produced non-JSON output: stdout={result.stdout.strip()[:500]!r} stderr={result.stderr.strip()[:1000]!r}"
+        ) from error
 
 
 def persist_result(conn, job_id, submission_id, result):
@@ -187,11 +192,12 @@ def advance_ready_windows(conn):
             if match["next_round"] is None:
                 continue
             ready = conn.execute("SELECT count(*) AS count FROM match_ready_ups WHERE match_id = %s AND round_number = %s", (match["id"], match["next_round"])).fetchone()["count"]
-            if ready < 2 and match["deadline"] > conn.execute("SELECT now() AS now").fetchone()["now"]:
+            if ready < 2 and match["deadline"] and match["deadline"] > conn.execute("SELECT now() AS now").fetchone()["now"]:
                 continue
             seconds = {"easy": 300, "medium": 600, "advanced": 1200}[match["difficulty"]]
+            round_number = 1 if match["next_round"] == 0 else match["next_round"]
             conn.execute("UPDATE matches SET status = 'active', started_at = COALESCE(started_at, now()), lobby_ends_at = NULL, ready_window_ends_at = NULL WHERE id = %s", (match["id"],))
-            conn.execute("UPDATE match_rounds SET status = 'active', starts_at = now(), ends_at = now() + (%s * interval '1 second') WHERE match_id = %s AND round_number = %s", (seconds, match["id"], match["next_round"]))
+            conn.execute("UPDATE match_rounds SET status = 'active', starts_at = now(), ends_at = now() + (%s * interval '1 second') WHERE match_id = %s AND round_number = %s", (seconds, match["id"], round_number))
 
 
 def settle_completed_matches(conn):
@@ -275,8 +281,11 @@ def fail_job(conn, job_id, error):
 
 
 def main():
+    conn = None
     while True:
-        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        try:
+            if conn is None or conn.closed:
+                conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
             advance_ready_windows(conn)
             auto_submit_expired_rounds(conn)
             auto_submit_expired_placements(conn)
@@ -292,6 +301,15 @@ def main():
                 persist_result(conn, job["id"], job["submission_id"], result)
             except Exception as error:
                 fail_job(conn, job["id"], error)
+        except psycopg.Error as error:
+            print(f"database error: {error}", flush=True)
+            if conn is not None:
+                conn.close()
+                conn = None
+            time.sleep(POLL_SECONDS)
+        except Exception as error:
+            print(f"worker loop error: {error}", flush=True)
+            time.sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":

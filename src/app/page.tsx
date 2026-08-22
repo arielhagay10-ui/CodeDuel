@@ -24,7 +24,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f7f7f5] text-[#161616]">
       <header className="border-b border-black/10 bg-[#f7f7f5]"><div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <a className="text-xl font-bold tracking-[-0.06em]" href="#top">CodeWars<span className="text-[#ed5b39]">.</span></a>
+        <a className="text-xl font-bold tracking-[-0.06em]" href="#top">CodeDuel<span className="text-[#ed5b39]">.</span></a>
         <nav className="hidden items-center gap-7 text-sm font-medium text-black/60 sm:flex"><a className="text-black" href="#play">Play</a><a href="#progress">Progress</a><a href="#leaderboard">Leaderboard</a></nav>
         <div className="flex items-center gap-3 text-sm"><span className="hidden text-black/50 sm:inline">Guest · Python</span><Link href="/sign-in" className="rounded-md bg-[#161616] px-3 py-2 text-xs font-bold text-white hover:bg-[#ed5b39]">Sign in</Link></div>
       </div></header>

@@ -1,4 +1,4 @@
--- CodeWars MVP: PostgreSQL schema. Apply through a migration tool in deployment.
+-- CodeDuel MVP: PostgreSQL schema. Apply through a migration tool in deployment.
 
 CREATE TYPE difficulty AS ENUM ('easy', 'medium', 'advanced');
 CREATE TYPE problem_format AS ENUM ('function', 'standard_input_output');

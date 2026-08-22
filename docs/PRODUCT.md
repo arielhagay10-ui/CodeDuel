@@ -1,10 +1,8 @@
-# Product brief — working title: CodeWars
+# Product brief — CodeDuel
 
 ## Positioning
 
 A competitive coding app for people who already know programming fundamentals. Players practice Python alone or enter ranked 1v1 matches to prove and improve their problem-solving speed.
-
-**Naming note:** "Codewars" is an existing platform. This is an internal working title only; choose and clear a distinct public name before launch.
 
 ## V1 audience and scope
 
@@ -54,7 +52,7 @@ Players complete **five placement matches** for each difficulty before receiving
 
 1. Exact rank names, divisions, and promotion rules.
 2. Exact number of placement matches per difficulty.
-3. Public name and visual identity.
+3. Visual identity.
 4. Whether solo performance should influence recommendations only or also qualify players for ranked queues.
 
 ## Content policy
