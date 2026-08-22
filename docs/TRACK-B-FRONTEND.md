@@ -279,7 +279,7 @@ git checkout track-b-frontend && git rebase main
 Set `NEXT_PUBLIC_MOCK_API=0` in `.env.local` and add:
 
 ```
-DATABASE_URL=postgresql://codewars:codewars_local_only@localhost:5432/codewars
+DATABASE_URL=postgresql://codeduel:codeduel_local_only@localhost:5432/codeduel
 ```
 
 Then:

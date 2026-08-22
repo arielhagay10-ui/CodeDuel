@@ -22,7 +22,7 @@ docker compose -f docker-compose.local.yml up -d db
 Create `.env.local` in the repo root:
 
 ```
-DATABASE_URL=postgresql://codewars:codewars_local_only@localhost:5432/codewars
+DATABASE_URL=postgresql://codeduel:codeduel_local_only@localhost:5432/codeduel
 AUTH_SECRET=<run: openssl rand -base64 32>
 ```
 
@@ -38,7 +38,7 @@ Read `docs/BACKEND.md` before writing anything. The rules about the judging boun
 
 ```bash
 docker compose -f docker-compose.local.yml exec -T db \
-  psql -U codewars -d codewars < db/migrations/009_seed_problems.sql
+  psql -U codeduel -d codeduel < db/migrations/009_seed_problems.sql
 ```
 
 Or wipe and start clean with `docker compose -f docker-compose.local.yml down -v`.
@@ -257,9 +257,9 @@ Repeat that block per problem. Mark two tests `is_public` on each one, because t
 
 ```bash
 docker compose -f docker-compose.local.yml exec -T db \
-  psql -U codewars -d codewars < db/migrations/009_seed_problems.sql
+  psql -U codeduel -d codeduel < db/migrations/009_seed_problems.sql
 
-docker compose -f docker-compose.local.yml exec db psql -U codewars -d codewars -c \
+docker compose -f docker-compose.local.yml exec db psql -U codeduel -d codeduel -c \
   "SELECT difficulty, count(*) FROM problems WHERE published_at IS NOT NULL GROUP BY 1;"
 ```
 
