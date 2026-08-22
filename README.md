@@ -1,20 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CodeDuel
 
-## Getting Started
+Competitive Python coding matches and focused solo practice. Two players queue at a
+difficulty, get paired, solve the same timed problems, and a sandboxed judge decides the
+match.
 
-First, run the development server:
+## Running the project
+
+There are two ways to run it. Pick based on what you are working on.
+
+| | What runs | Use it for |
+| --- | --- | --- |
+| **Mock mode** | Next.js only | Match UI work. No Docker, no database. |
+| **Full stack** | Next.js + Postgres + judge worker | Anything touching the API, the schema, or judging. |
+
+Mock mode is the faster loop and is documented in the next section. The rest of this
+section is the full stack.
+
+### What you need
+
+Docker (running), and Node 20+ or [Bun](https://bun.sh). Both package managers work;
+`bun install` and `npm install` agree on this project.
+
+The judge worker mounts the host Docker socket so it can launch a throwaway container per
+submission. That is local-development only — never expose that service.
+
+### 1. Install and configure
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # or: bun install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create `.env.local` in the repo root:
+
+```
+DATABASE_URL=postgresql://codeduel:codeduel_local_only@localhost:5432/codeduel
+AUTH_SECRET=<run: openssl rand -base64 32>
+```
+
+Leave the OAuth variables unset. Local sign-in does not use them (see step 4).
+
+### 2. Start Postgres
+
+```bash
+docker compose -f docker-compose.local.yml up -d db
+```
+
+**The migrations only run once.** `db/migrations/` is mounted into
+`/docker-entrypoint-initdb.d`, and Postgres runs that directory exactly when it creates
+the data directory. On an existing volume your migrations are silently skipped, including
+the `009` problem seed — and an empty `problems` table makes `/api/queue` return 503
+before a match can start.
+
+Start clean with `docker compose -f docker-compose.local.yml down -v`, or apply one by
+hand:
+
+```bash
+docker compose -f docker-compose.local.yml exec -T db \
+  psql -U codeduel -d codeduel < db/migrations/009_seed_problems.sql
+```
+
+Confirm the seed landed — you want 14 problems:
+
+```bash
+docker compose -f docker-compose.local.yml exec -T db \
+  psql -U codeduel -d codeduel -c "SELECT difficulty, count(*) FROM problems GROUP BY difficulty;"
+```
+
+### 3. Start the judge worker
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build judge-worker
+```
+
+This also builds the runner image the worker launches per submission. The worker is quiet
+when healthy: it logs on failure only, so no output is the good case. Check it with
+`docker compose -f docker-compose.local.yml logs judge-worker`.
+
+### 4. Start the app and sign in
+
+```bash
+npm run dev          # or: bun dev
+```
+
+[http://localhost:3000](http://localhost:3000).
+
+If `NEXT_PUBLIC_MOCK_API=1` is still in your `.env.local` from mock mode, remove it. The
+flag is read at build time, so the pages keep talking to the in-browser fake and ignore
+every route you just started, with nothing in the logs to say so.
+
+A match needs two signed-in players. Outside production there is a credentials provider
+that creates a fully ranked-eligible account from a handle, so you do not need to register
+OAuth apps to click through a local match.
+
+**It has no button on the sign-in page yet** — `/sign-in` offers only Google and GitHub.
+For now, drive it over the API and keep the cookie jar:
+
+```bash
+ORIGIN=http://localhost:3000
+CSRF=$(curl -sS -c alpha.cookies -b alpha.cookies $ORIGIN/api/auth/csrf | sed -E 's/.*"csrfToken":"([^"]+)".*/\1/')
+curl -sS -c alpha.cookies -b alpha.cookies -H "Origin: $ORIGIN" \
+  --data-urlencode "csrfToken=$CSRF" --data-urlencode "handle=alpha" --data-urlencode "json=true" \
+  $ORIGIN/api/auth/callback/dev
+```
+
+Repeat with a second handle and jar to get an opponent. Then queue both:
+
+```bash
+curl -sS -b alpha.cookies -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
+  -d '{"difficulty":"medium"}' $ORIGIN/api/queue
+```
+
+The second player's call returns `201` with a `matchId`.
+
+Every mutating request needs an `Origin` header. `src/proxy.ts` rejects cross-site
+mutations before a route can read a session cookie, so a bare `curl -X POST` gets a 403.
+
+### Stopping
+
+```bash
+docker compose -f docker-compose.local.yml down      # keeps your data
+docker compose -f docker-compose.local.yml down -v   # also wipes the volume
+```
+
+### Checks
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build
+python3 -m unittest discover judge-worker    # Glicko-2 rating tests
+```
 
 ## Working on the match UI without a database
 
@@ -46,10 +161,6 @@ mock code ships to production.
 
 Every network call goes through `src/lib/api-client.ts`. Nothing else in the
 browser calls `fetch`, which is what makes the flag a single switch.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
 
