@@ -285,7 +285,13 @@ def main():
     while True:
         try:
             if conn is None or conn.closed:
-                conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+                # autocommit is required now that the connection outlives the loop body.
+                # Every mutation here runs inside `with conn.transaction()`, but a read
+                # outside one (load_submission) would otherwise open an implicit
+                # transaction that nothing ever commits. Each later `conn.transaction()`
+                # would then degrade to a savepoint nested inside it, so judged results
+                # and job claims would be rolled into a transaction that never lands.
+                conn = psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=True)
             advance_ready_windows(conn)
             auto_submit_expired_rounds(conn)
             auto_submit_expired_placements(conn)
