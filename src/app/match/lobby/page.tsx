@@ -66,7 +66,7 @@ function MatchLobbyContent() {
   return (
     <Shell>
       <div className="flex items-center justify-between">
-        <Link href="/queue" className="text-xl font-bold tracking-[-0.06em]">CodeWars<span className="text-[#ed5b39]">.</span></Link>
+        <Link href="/queue" className="text-xl font-bold tracking-[-0.06em]">CodeDuel<span className="text-[#ed5b39]">.</span></Link>
         <span className="rounded-full bg-[#fbebe5] px-3 py-1 text-xs font-bold text-[#c73d25]">{difficultyLabel(match.difficulty)} ranked</span>
       </div>
 

@@ -5,6 +5,27 @@ import { requireRankedUser } from "@/lib/ranked-access";
 
 const maxSourceLength = 100_000;
 
+export async function GET(_request: Request, context: RouteContext<"/api/match-rounds/[roundId]/draft">) {
+  const { userId, error } = await requireRankedUser();
+  if (error) return error;
+  const { roundId } = await context.params;
+  const draft = await getDb().query<{ source_code: string | null; updated_at: string | null }>(
+    [
+      "SELECT d.source_code, d.updated_at",
+      "FROM match_rounds r JOIN matches m ON m.id = r.match_id",
+      "LEFT JOIN round_drafts d ON d.match_round_id = r.id AND d.user_id = $2",
+      "WHERE r.id = $1 AND r.status = 'active' AND $2 IN (m.player_one_id, m.player_two_id)",
+    ].join(" "),
+    [roundId, userId],
+  );
+  if (!draft.rowCount) return NextResponse.json({ error: "This active round is unavailable." }, { status: 404 });
+  const value = draft.rows[0];
+  return NextResponse.json({
+    sourceCode: value.source_code,
+    updatedAt: value.updated_at,
+  });
+}
+
 export async function PUT(request: Request, context: RouteContext<"/api/match-rounds/[roundId]/draft">) {
   const { userId, error } = await requireRankedUser();
   if (error) return error;

@@ -104,7 +104,7 @@ function MatchRoundContent() {
     <main className="min-h-screen bg-[#f7f7f5] text-[#161616]">
       <header className="border-b border-black/10 bg-white">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-5 sm:px-8">
-          <Link href="/" className="text-xl font-bold tracking-[-0.06em]">CodeWars<span className="text-[#ed5b39]">.</span></Link>
+          <Link href="/" className="text-xl font-bold tracking-[-0.06em]">CodeDuel<span className="text-[#ed5b39]">.</span></Link>
           <div className="flex items-center gap-4">
             <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">
               Round {round.roundNumber} · {difficultyLabel(problem.difficulty)}

@@ -33,7 +33,7 @@ export default function HandleOnboardingPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-[#f7f7f5] p-5 text-[#161616]">
       <section className="w-full max-w-lg rounded-2xl border border-black/10 bg-white p-7 shadow-[0_20px_60px_rgb(0_0_0_/_0.08)] sm:p-10">
-        <Link href="/" className="text-xl font-bold tracking-[-0.06em]">CodeWars<span className="text-[#ed5b39]">.</span></Link>
+        <Link href="/" className="text-xl font-bold tracking-[-0.06em]">CodeDuel<span className="text-[#ed5b39]">.</span></Link>
         <p className="mt-10 text-xs font-bold uppercase tracking-[0.18em] text-[#ed5b39]">Step 1 of 2</p>
         <h1 className="mt-3 text-4xl font-semibold tracking-[-0.055em]">Choose your handle.</h1>
         <p className="mt-4 max-w-md text-sm leading-6 text-black/60">This is the name your opponents see, and it will appear on leaderboards and your match history.</p>
