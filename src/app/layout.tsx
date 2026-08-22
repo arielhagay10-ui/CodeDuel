@@ -3,7 +3,7 @@ import "./globals.css";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
-  title: "CodeWars — Competitive coding",
+  title: "CodeDuel — Competitive coding",
   description: "Competitive Python coding matches and focused solo practice.",
 };
 

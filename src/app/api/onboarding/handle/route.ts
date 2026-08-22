@@ -4,7 +4,7 @@ import { requireUserId } from "@/lib/access";
 import { getDb } from "@/lib/db";
 
 const handlePattern = /^[A-Za-z0-9](?:[A-Za-z0-9_]{1,22}[A-Za-z0-9])?$/;
-const reservedHandles = new Set(["admin", "codewars", "moderator", "support", "system"]);
+const reservedHandles = new Set(["admin", "codeduel", "moderator", "support", "system"]);
 
 export async function POST(request: Request) {
   const userId = await requireUserId();

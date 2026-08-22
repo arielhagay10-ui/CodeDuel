@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 
 declare global {
-  var codewarsPool: Pool | undefined;
+  var codeduelPool: Pool | undefined;
 }
 
 function createPool() {
@@ -15,9 +15,9 @@ function createPool() {
 }
 
 export function getDb() {
-  const pool = global.codewarsPool ?? createPool();
+  const pool = global.codeduelPool ?? createPool();
   if (process.env.NODE_ENV !== "production") {
-    global.codewarsPool = pool;
+    global.codeduelPool = pool;
   }
   return pool;
 }

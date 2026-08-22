@@ -42,3 +42,10 @@ next-env.d.ts
 
 # bun
 bun.lock
+
+# python
+__pycache__/
+*.pyc
+
+# saved dev session cookies from local end-to-end runs
+*.cookies
