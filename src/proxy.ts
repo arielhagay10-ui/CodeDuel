@@ -3,6 +3,51 @@ import type { NextRequest } from "next/server";
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
+type RateLimit = { limit: number; windowMs: number };
+type RateWindow = { startedAt: number; count: number };
+
+const minute = 60_000;
+const rateWindows = new Map<string, RateWindow>();
+const defaultLimit: RateLimit = { limit: 120, windowMs: minute };
+
+function limitFor(pathname: string): RateLimit {
+  if (pathname === "/api/queue") return { limit: 10, windowMs: minute };
+  if (pathname === "/api/practice/runs") return { limit: 6, windowMs: minute };
+  if (/^\/api\/(match-rounds|placements)\/[^/]+\/submissions$/.test(pathname)) return { limit: 30, windowMs: minute };
+  if (/^\/api\/match-rounds\/[^/]+\/draft$/.test(pathname)) return { limit: 60, windowMs: minute };
+  return defaultLimit;
+}
+
+function clientIp(request: NextRequest) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? request.headers.get("x-real-ip")
+    ?? "unknown";
+}
+
+function rateLimitKey(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/api/auth/")) return `ip:${clientIp(request)}`;
+  const session = request.cookies.get("__Secure-next-auth.session-token")?.value
+    ?? request.cookies.get("next-auth.session-token")?.value;
+  return session ? `session:${session}` : `ip:${clientIp(request)}`;
+}
+
+function enforceRateLimit(request: NextRequest) {
+  const policy = limitFor(request.nextUrl.pathname);
+  const now = Date.now();
+  const key = `${rateLimitKey(request)}:${request.nextUrl.pathname}`;
+  const window = rateWindows.get(key);
+  if (!window || now - window.startedAt >= policy.windowMs) {
+    rateWindows.set(key, { startedAt: now, count: 1 });
+    return null;
+  }
+  window.count += 1;
+  if (window.count <= policy.limit) return null;
+  const retryAfter = Math.max(1, Math.ceil((policy.windowMs - (now - window.startedAt)) / 1000));
+  const response = NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+  response.headers.set("Retry-After", String(retryAfter));
+  return response;
+}
+
 const isApiPath = (pathname: string) => pathname === "/api" || pathname.startsWith("/api/");
 
 /** Reject cross-site mutations before an API route can read a session cookie. */
@@ -60,7 +105,11 @@ function withCsp(request: NextRequest) {
 }
 
 export function proxy(request: NextRequest) {
-  if (isApiPath(request.nextUrl.pathname)) return guardApi(request);
+  if (isApiPath(request.nextUrl.pathname)) {
+    const guarded = guardApi(request);
+    if (guarded.status !== 200) return guarded;
+    return enforceRateLimit(request) ?? guarded;
+  }
   return withCsp(request);
 }
 

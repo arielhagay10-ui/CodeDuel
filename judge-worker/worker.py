@@ -271,13 +271,27 @@ def auto_submit_expired_placements(conn):
             conn.execute("INSERT INTO judge_jobs (id, submission_id) VALUES (%s, %s)", (str(uuid.uuid4()), submission_id))
 
 
-def fail_job(conn, job_id, error):
+def fail_job(conn, job_id, submission_id, tests_total, error):
+    """A runner protocol failure is terminal: it must not freeze a match round."""
+    result = {
+        "verdict": "internal_error",
+        "tests_passed": 0,
+        "tests_total": tests_total,
+        "error": str(error)[:2000],
+    }
     with conn.transaction():
         conn.execute("""
-          UPDATE judge_jobs SET status = CASE WHEN attempts >= 3 THEN 'failed' ELSE 'queued' END,
-            available_at = now() + interval '15 seconds', last_error = %s, locked_at = NULL, locked_by = NULL
+          UPDATE submissions SET verdict = 'internal_error', tests_passed = 0, tests_total = %s,
+            hidden_result = %s::jsonb, judged_at = now()
+          WHERE id = %s
+        """, (tests_total, json.dumps(result), submission_id))
+        conn.execute("""
+          UPDATE judge_jobs SET status = 'failed', completed_at = now(), last_error = %s,
+            locked_at = NULL, locked_by = NULL
           WHERE id = %s
         """, (str(error)[:2000], job_id))
+        resolve_round_if_ready(conn, submission_id)
+        resolve_placement_if_ready(conn, submission_id, result)
 
 
 def main():
@@ -302,11 +316,13 @@ def main():
             if not job:
                 time.sleep(POLL_SECONDS)
                 continue
+            submission = None
             try:
-                result = execute(load_submission(conn, job["submission_id"]))
+                submission = load_submission(conn, job["submission_id"])
+                result = execute(submission)
                 persist_result(conn, job["id"], job["submission_id"], result)
             except Exception as error:
-                fail_job(conn, job["id"], error)
+                fail_job(conn, job["id"], job["submission_id"], len(submission["tests"]) if submission else 0, error)
         except psycopg.Error as error:
             print(f"database error: {error}", flush=True)
             if conn is not None:

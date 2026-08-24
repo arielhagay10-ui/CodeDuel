@@ -151,3 +151,52 @@ export type QueueState = {
   queuedAt?: string;
   matchId?: string | null;
 };
+
+type VisibleRank = { tier: string; division: string | null };
+
+/** `GET /api/players/[handle]` — only public, visible player data. */
+export type PlayerProfile = {
+  handle: string;
+  ranks: { difficulty: Difficulty; rank: VisibleRank | null }[];
+  recentMatches: {
+    id: string;
+    difficulty: Difficulty;
+    opponentHandle: string;
+    outcome: Outcome;
+    completedAt: string;
+  }[];
+};
+
+/** `GET /api/ratings/me` */
+export type RatingsSummary = {
+  ratings: {
+    difficulty: Difficulty;
+    placementsCompleted: number;
+    rank: VisibleRank | null;
+  }[];
+};
+
+/** `GET /api/placements` */
+export type PlacementState = {
+  attempt: {
+    id: string;
+    difficulty: Difficulty;
+    placementNumber: number;
+    problemId: string;
+    endsAt: string;
+  } | null;
+  progress: {
+    difficulty: Difficulty;
+    placementsCompleted: number;
+    placementsTotal: 5;
+    rank: VisibleRank | null;
+  }[];
+};
+
+/** `POST /api/practice/runs` — public tests only. */
+export type PracticeRun = {
+  id: string;
+  verdict: SubmissionVerdict;
+  testsPassed: number;
+  testsTotal: number;
+};
