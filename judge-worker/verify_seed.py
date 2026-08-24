@@ -7,8 +7,15 @@ import sys
 import psycopg
 from psycopg.rows import dict_row
 
+from sandbox import run_sandboxed, sandbox_available
+
 
 def main():
+    # Reference solutions are ours, but they are still arbitrary code and they still
+    # get the container: a runaway reference solution should fail a check, not a laptop.
+    available, reason = sandbox_available()
+    if not available:
+        raise SystemExit(f"cannot verify seeds: {reason}")
     with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
         problems = conn.execute(
             "SELECT id, slug, format, entrypoint, reference_solution FROM problems WHERE published_at IS NOT NULL AND retired_at IS NULL ORDER BY slug"
@@ -25,14 +32,11 @@ def main():
                 "source_code": problem["reference_solution"],
                 "tests": tests,
             }
-            result = subprocess.run(
-                [sys.executable, "runner/run_tests.py"],
-                input=json.dumps(payload),
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
+            try:
+                result = run_sandboxed(payload, timeout=60)
+            except subprocess.TimeoutExpired:
+                failures.append(f"{problem['slug']}: reference solution did not finish in 60s")
+                continue
             try:
                 outcome = json.loads(result.stdout)
             except json.JSONDecodeError:

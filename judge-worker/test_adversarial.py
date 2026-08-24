@@ -1,11 +1,22 @@
+"""Sandbox-escape tests.
+
+Every payload here is genuinely hostile -- a fork bomb, a 200MB allocation, an
+outbound connection -- and every verdict they assert comes from a container flag in
+`sandbox.py`, not from anything `run_tests.py` enforces about itself. So they run
+through `run_sandboxed` and nowhere else.
+
+There is no host fallback. If the runner image is not built these tests skip, because
+the alternative is running a fork bomb on whoever typed `unittest discover`.
+
+    docker compose -f docker-compose.judge.yml build judge-runner
+"""
 import json
-import os
 import subprocess
-import sys
 import unittest
 
+from sandbox import run_sandboxed, sandbox_available
 
-RUNNER = os.path.join(os.path.dirname(__file__), "runner", "run_tests.py")
+SANDBOX_AVAILABLE, SANDBOX_REASON = sandbox_available()
 
 
 def judge(source, *, expected="3"):
@@ -13,13 +24,19 @@ def judge(source, *, expected="3"):
         "format": "function", "entrypoint": "solve", "source_code": source,
         "tests": [{"input_data": '{"args": [1, 2]}', "expected_output": expected}],
     }
-    completed = subprocess.run(
-        [sys.executable, RUNNER], input=json.dumps(payload), text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False,
-    )
-    return json.loads(completed.stdout)
+    try:
+        completed = run_sandboxed(payload, timeout=30)
+    except subprocess.TimeoutExpired:
+        raise AssertionError("runner container did not terminate; the sandbox is not holding") from None
+    if completed.returncode != 0:
+        raise AssertionError(f"runner container exited {completed.returncode}: {completed.stderr.strip()[:1000]!r}")
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        raise AssertionError(f"runner produced non-JSON: {completed.stdout.strip()[:500]!r}") from None
 
 
+@unittest.skipUnless(SANDBOX_AVAILABLE, f"sandbox unavailable: {SANDBOX_REASON}")
 class AdversarialRunnerTests(unittest.TestCase):
     def test_parent_frame_cannot_read_expected_output(self):
         result = judge('import sys, json\ndef solve(*a): return json.loads(sys._getframe(1).f_locals["test"]["expected_output"])')
@@ -60,6 +77,24 @@ class AdversarialRunnerTests(unittest.TestCase):
     def test_stdout_flood_is_terminal(self):
         result = judge('def solve(*a):\n print("x" * (100 * 1024 * 1024))\n return 3')
         self.assertEqual(result["verdict"], "runtime_error")
+
+
+class SandboxWiringTests(unittest.TestCase):
+    """These run everywhere, image or not: they are what keeps the suite off the host."""
+
+    def test_sandbox_command_is_a_container(self):
+        from sandbox import sandbox_command
+
+        command = sandbox_command()
+        self.assertEqual(command[:2], ["docker", "run"])
+        for flag in ("--network", "none", "--pids-limit", "--memory", "--read-only", "--cap-drop"):
+            self.assertIn(flag, command)
+
+    def test_module_never_reaches_for_the_runner_script(self):
+        import sandbox
+
+        self.assertNotIn("run_tests.py", (sandbox.sandbox_command() or []))
+        self.assertNotIn("run_tests", " ".join(sandbox.sandbox_command()))
 
 
 if __name__ == "__main__":

@@ -9,9 +9,9 @@ import psycopg
 from psycopg.rows import dict_row
 
 from rating import Rating, update_rating, visible_rank
+from sandbox import run_sandboxed
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-RUNNER_IMAGE = os.getenv("JUDGE_RUNNER_IMAGE", "codeduel-judge-runner:latest")
 WORKER_ID = os.getenv("HOSTNAME", f"judge-{uuid.uuid4()}")
 POLL_SECONDS = float(os.getenv("JUDGE_POLL_SECONDS", "1"))
 
@@ -41,14 +41,8 @@ def load_submission(conn, submission_id):
 
 def execute(submission):
     payload = {"format": submission["format"], "entrypoint": submission["entrypoint"], "tests": submission["tests"], "source_code": submission["source_code"]}
-    command = [
-        "docker", "run", "--rm", "-i", "--network", "none", "--read-only", "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges", "--pids-limit", "32", "--memory", "128m", "--cpus", "0.5",
-        "--user", "10001:10001", "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m", RUNNER_IMAGE,
-    ]
     try:
-        result = subprocess.run(command, input=json.dumps(payload), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=max(3, submission["time_limit_ms"] / 1000 + 2), check=False)
+        result = run_sandboxed(payload, timeout=max(3, submission["time_limit_ms"] / 1000 + 2))
     except subprocess.TimeoutExpired:
         return {"verdict": "time_limit_exceeded", "tests_passed": 0, "tests_total": len(submission["tests"])}
     if result.returncode != 0:

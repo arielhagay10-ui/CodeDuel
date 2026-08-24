@@ -10,12 +10,18 @@ import time
 
 WALL_TIME_SECONDS = 2
 MAX_OUTPUT_BYTES = 1024 * 1024
+MAX_PROCESSES = 24
 
 
 def limit_resources():
     resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
     resource.setrlimit(resource.RLIMIT_AS, (96 * 1024 * 1024, 96 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
+    # Defence in depth behind the container's --pids-limit. RLIMIT_AS caps one process,
+    # so without a process ceiling `while True: os.fork()` multiplies that cap instead of
+    # hitting it. Inherited by every child, and CPU accounting resets on fork, so this is
+    # the only limit here that a fork bomb actually runs into.
+    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
 
 
 def normalize(value):
@@ -23,34 +29,49 @@ def normalize(value):
 
 
 def read_limited(process, timeout):
-    """Read child stdout without allowing a submission to fill runner memory."""
+    """Read child stdout without letting a submission fill runner memory.
+
+    Returns (output, None) once the child closes stdout and exits, or (None, verdict)
+    if it overruns the wall clock or floods stdout. The caller owns cleanup.
+    """
     output = bytearray()
     deadline = time.monotonic() + timeout
+    stdout = process.stdout
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            process.kill()
-            process.wait()
             return None, "time_limit_exceeded"
-        ready, _, _ = select.select([process.stdout], [], [], remaining)
-        if ready:
-            chunk = os.read(process.stdout.fileno(), min(65536, MAX_OUTPUT_BYTES + 1 - len(output)))
-            if chunk:
-                output.extend(chunk)
-                if len(output) > MAX_OUTPUT_BYTES:
-                    process.kill()
-                    process.wait()
-                    return None, "runtime_error"
-                continue
-        if process.poll() is not None:
-            while True:
-                chunk = os.read(process.stdout.fileno(), min(65536, MAX_OUTPUT_BYTES + 1 - len(output)))
-                if not chunk:
-                    break
-                output.extend(chunk)
-                if len(output) > MAX_OUTPUT_BYTES:
-                    return None, "runtime_error"
-            return bytes(output), None
+        ready, _, _ = select.select([stdout], [], [], remaining)
+        if not ready:
+            continue
+        chunk = os.read(stdout.fileno(), min(65536, MAX_OUTPUT_BYTES + 1 - len(output)))
+        if not chunk:
+            # EOF. A closed pipe stays permanently readable, so polling it again here
+            # would spin the loop at full tilt until the deadline.
+            break
+        output.extend(chunk)
+        if len(output) > MAX_OUTPUT_BYTES:
+            return None, "runtime_error"
+    try:
+        # stdout can close well before the process exits; it still owes us an exit code.
+        process.wait(timeout=max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        return None, "time_limit_exceeded"
+    return bytes(output), None
+
+
+def release(process):
+    """Reap the child and close its pipes.
+
+    Popen does not close these for us, and a leaked pair per test walks straight into
+    the RLIMIT_NOFILE ceiling on any problem with more than a handful of tests.
+    """
+    if process.poll() is None:
+        process.kill()
+        process.wait()
+    for stream in (process.stdin, process.stdout):
+        if stream is not None and not stream.closed:
+            stream.close()
 
 
 def run_function(source_path, entrypoint, input_data):
@@ -64,19 +85,22 @@ def run_function(source_path, entrypoint, input_data):
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=False,
     )
     try:
-        process.stdin.write(input_data.encode("utf-8"))
-        process.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
-    output, error = read_limited(process, WALL_TIME_SECONDS)
-    if error:
-        return None, error
-    if process.returncode != 0:
-        return None, "runtime_error"
-    try:
-        return json.loads(output), None
-    except (TypeError, json.JSONDecodeError, UnicodeDecodeError):
-        return None, "runtime_error"
+        try:
+            process.stdin.write(input_data.encode("utf-8"))
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+        output, error = read_limited(process, WALL_TIME_SECONDS)
+        if error:
+            return None, error
+        if process.returncode != 0:
+            return None, "runtime_error"
+        try:
+            return json.loads(output), None
+        except (TypeError, json.JSONDecodeError, UnicodeDecodeError):
+            return None, "runtime_error"
+    finally:
+        release(process)
 
 
 def function_test(source_path, entrypoint, test):
@@ -91,16 +115,19 @@ def stdio_test(source_path, test):
         [sys.executable, source_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=False,
     )
     try:
-        process.stdin.write(test["input_data"].encode("utf-8"))
-        process.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
-    output, error = read_limited(process, WALL_TIME_SECONDS)
-    if error:
-        return False, error
-    if process.returncode != 0:
-        return False, "runtime_error"
-    return output.decode("utf-8", errors="replace").strip() == test["expected_output"].strip(), None
+        try:
+            process.stdin.write(test["input_data"].encode("utf-8"))
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+        output, error = read_limited(process, WALL_TIME_SECONDS)
+        if error:
+            return False, error
+        if process.returncode != 0:
+            return False, "runtime_error"
+        return output.decode("utf-8", errors="replace").strip() == test["expected_output"].strip(), None
+    finally:
+        release(process)
 
 
 def main():
