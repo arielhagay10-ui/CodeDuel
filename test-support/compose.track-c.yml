@@ -1,0 +1,31 @@
+# Disposable local verification stack. Never point this at the regular DB volume.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: codeduel
+      POSTGRES_USER: codeduel
+      POSTGRES_PASSWORD: codeduel_local_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - verification_data:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codeduel -d codeduel"]
+      interval: 2s
+      retries: 30
+  judge-worker:
+    image: codeduel-app-judge-worker:latest
+    profiles: ["judge"]
+    user: "0:0"
+    environment:
+      DATABASE_URL: postgresql://codeduel:codeduel_local_only@db:5432/codeduel
+      JUDGE_RUNNER_IMAGE: codeduel-judge-runner:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  verification_data:
