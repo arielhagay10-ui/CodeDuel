@@ -2,8 +2,36 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/lib/db";
 import { requireRankedUser } from "@/lib/ranked-access";
+import type { PlacementState } from "@/types/api";
 
 const limits: Record<string, number> = { easy: 600, medium: 840, advanced: 1080 };
+
+export async function GET() {
+  const { userId, error } = await requireRankedUser();
+  if (error) return error;
+  const db = getDb();
+  const [active, ratings] = await Promise.all([
+    db.query<{ id: string; difficulty: "easy" | "medium" | "advanced"; placement_number: number; problem_id: string; ends_at: string }>(
+      "SELECT id, difficulty, placement_number, problem_id, ends_at FROM placement_attempts WHERE user_id = $1 AND status = 'active' ORDER BY ends_at LIMIT 1",
+      [userId],
+    ),
+    db.query<{ difficulty: "easy" | "medium" | "advanced"; placement_matches_completed: number; visible_tier: string | null; visible_division: string | null }>(
+      "SELECT difficulty, placement_matches_completed, visible_tier, visible_division FROM user_difficulty_ratings WHERE user_id = $1 ORDER BY difficulty",
+      [userId],
+    ),
+  ]);
+  const attempt = active.rows[0];
+  const response: PlacementState = {
+    attempt: attempt ? { id: attempt.id, difficulty: attempt.difficulty, placementNumber: attempt.placement_number, problemId: attempt.problem_id, endsAt: attempt.ends_at } : null,
+    progress: ratings.rows.map((rating) => ({
+      difficulty: rating.difficulty,
+      placementsCompleted: rating.placement_matches_completed,
+      placementsTotal: 5,
+      rank: rating.placement_matches_completed === 5 && rating.visible_tier ? { tier: rating.visible_tier, division: rating.visible_division } : null,
+    })),
+  };
+  return NextResponse.json(response);
+}
 
 export async function POST(request: Request) {
   const { userId, error } = await requireRankedUser();

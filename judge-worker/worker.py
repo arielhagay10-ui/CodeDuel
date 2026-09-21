@@ -30,6 +30,19 @@ def claim_job(conn):
     return job
 
 
+def claim_practice_job(conn):
+    with conn.transaction():
+        return conn.execute("""
+          WITH candidate AS (
+            SELECT id FROM practice_jobs WHERE status = 'queued' AND available_at <= now()
+            ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1
+          )
+          UPDATE practice_jobs SET status = 'running', locked_at = now(), locked_by = %s
+          WHERE id = (SELECT id FROM candidate)
+          RETURNING id, practice_run_id
+        """, (WORKER_ID,)).fetchone()
+
+
 def load_submission(conn, submission_id):
     return conn.execute("""
       SELECT s.id, s.source_code, p.format, p.entrypoint, p.time_limit_ms,
@@ -37,6 +50,15 @@ def load_submission(conn, submission_id):
       FROM submissions s JOIN problems p ON p.id = s.problem_id JOIN problem_tests t ON t.problem_id = p.id
       WHERE s.id = %s GROUP BY s.id, p.id
     """, (submission_id,)).fetchone()
+
+
+def load_practice_run(conn, run_id):
+    return conn.execute("""
+      SELECT r.id, r.source_code, p.format, p.entrypoint, p.time_limit_ms,
+        jsonb_agg(jsonb_build_object('input_data', t.input_data, 'expected_output', t.expected_output, 'ordinal', t.ordinal) ORDER BY t.ordinal) AS tests
+      FROM practice_runs r JOIN problems p ON p.id = r.problem_id JOIN problem_tests t ON t.problem_id = p.id AND t.is_public
+      WHERE r.id = %s GROUP BY r.id, p.id
+    """, (run_id,)).fetchone()
 
 
 def execute(submission):
@@ -64,6 +86,14 @@ def persist_result(conn, job_id, submission_id, result):
         conn.execute("UPDATE judge_jobs SET status = 'completed', completed_at = now() WHERE id = %s", (job_id,))
         resolve_round_if_ready(conn, submission_id)
         resolve_placement_if_ready(conn, submission_id, result)
+
+
+def persist_practice_result(conn, job_id, run_id, result):
+    with conn.transaction():
+        conn.execute("""
+          UPDATE practice_runs SET verdict = %s, tests_passed = %s, tests_total = %s, judged_at = now() WHERE id = %s
+        """, (result["verdict"], result["tests_passed"], result["tests_total"], run_id))
+        conn.execute("UPDATE practice_jobs SET status = 'completed', completed_at = now() WHERE id = %s", (job_id,))
 
 
 def resolve_placement_if_ready(conn, submission_id, result):
@@ -307,16 +337,26 @@ def main():
             settle_completed_matches(conn)
             purge_expired_messages(conn)
             job = claim_job(conn)
-            if not job:
-                time.sleep(POLL_SECONDS)
+            if job:
+                submission = None
+                try:
+                    submission = load_submission(conn, job["submission_id"])
+                    result = execute(submission)
+                    persist_result(conn, job["id"], job["submission_id"], result)
+                except Exception as error:
+                    fail_job(conn, job["id"], job["submission_id"], len(submission["tests"]) if submission else 0, error)
                 continue
-            submission = None
-            try:
-                submission = load_submission(conn, job["submission_id"])
-                result = execute(submission)
-                persist_result(conn, job["id"], job["submission_id"], result)
-            except Exception as error:
-                fail_job(conn, job["id"], job["submission_id"], len(submission["tests"]) if submission else 0, error)
+            practice_job = claim_practice_job(conn)
+            if practice_job:
+                try:
+                    run = load_practice_run(conn, practice_job["practice_run_id"])
+                    persist_practice_result(conn, practice_job["id"], practice_job["practice_run_id"], execute(run))
+                except Exception as error:
+                    with conn.transaction():
+                        conn.execute("UPDATE practice_runs SET verdict = 'internal_error', judged_at = now() WHERE id = %s", (practice_job["practice_run_id"],))
+                        conn.execute("UPDATE practice_jobs SET status = 'failed', completed_at = now(), last_error = %s WHERE id = %s", (str(error)[:2000], practice_job["id"]))
+                continue
+            time.sleep(POLL_SECONDS)
         except psycopg.Error as error:
             print(f"database error: {error}", flush=True)
             if conn is not None:
