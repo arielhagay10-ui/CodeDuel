@@ -33,7 +33,8 @@ export async function POST(_request: Request, context: RouteContext<"/api/matche
     const rematchId = crypto.randomUUID();
     await client.query("INSERT INTO matches (id, difficulty, player_one_id, player_two_id, player_one_mmr_before, player_two_mmr_before, lobby_ends_at) VALUES ($1, $2, $3, $4, $5, $6, now() + interval '60 seconds')", [rematchId, match.difficulty, match.player_one_id, match.player_two_id, byUser.get(match.player_one_id)?.mmr, byUser.get(match.player_two_id)?.mmr]);
     for (const [index, problem] of problems.rows.entries()) await client.query("INSERT INTO match_rounds (id, match_id, problem_id, round_number) VALUES ($1, $2, $3, $4)", [crypto.randomUUID(), rematchId, problem.id, index + 1]);
-    await client.query("UPDATE match_rematch_requests SET rematch_id = $1 WHERE match_id = $2", [rematchId, matchId]);
+    // The unique rematch index allows one link, shared by both requests on reads.
+    await client.query("UPDATE match_rematch_requests SET rematch_id = $1 WHERE match_id = $2 AND requester_id = $3", [rematchId, matchId, userId]);
     await client.query("COMMIT");
     return NextResponse.json({ accepted: true, matchId: rematchId }, { status: 201 });
   } catch (caught) {

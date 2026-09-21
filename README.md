@@ -128,8 +128,22 @@ docker compose -f docker-compose.local.yml down -v   # also wipes the volume
 npx tsc --noEmit
 npm run lint
 npm run build
-python3 -m unittest discover judge-worker    # Glicko-2 rating tests
+npm test                                     # proxy rate-limit / memory-bound tests
+
+# Rating tests, plus the sandbox-escape tests if the runner image is built.
+docker compose -f docker-compose.judge.yml build judge-runner
+python3 -m unittest discover judge-worker
 ```
+
+The sandbox-escape suite in `judge-worker/test_adversarial.py` feeds the judge real
+attacks — a fork bomb, a 200MB allocation, an outbound connection. They are only safe
+because every one of them runs inside the runner container, where `--pids-limit`,
+`--memory` and `--network none` are what actually stop them. Without the image built
+those tests skip rather than fall back to your machine.
+
+Never run `judge-worker/runner/run_tests.py` directly. Outside the container there is
+no process ceiling, and the fork bomb case will take the host down with it. Everything
+that judges a submission goes through `run_sandboxed` in `judge-worker/sandbox.py`.
 
 ## Working on the match UI without a database
 
