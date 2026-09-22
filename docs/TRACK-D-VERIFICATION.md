@@ -18,7 +18,8 @@ reads. These use explicit public projections. Other bridge fixes make practice e
 transactional, normalize placement resume responses, return duplicate submissions as
 409, and keep read polling outside mutation rate budgets. The same-origin guard uses
 the actual Host because Next normalizes loopback aliases; foreign origins remain rejected.
-`src/types/api.ts`, the worker and migrations are unchanged.
+`src/types/api.ts` and the worker are unchanged. Migration 011 adds the three missing
+Advanced exercises without changing existing problems or player progress.
 
 ## Verified locally, September 21–22, 2026
 
@@ -44,6 +45,11 @@ port 55432. The regular database on port 5432 was not changed.
 - `NODE_ENV=production npm run build`: passed. Build workers require process-spawn permission.
 - `node test-support/track-c-production.mjs`: passed; dev sign-in/callback GET and POST
   return 404 without redirects or session cookies. Google/GitHub providers remain registered.
+- `node test-support/track-d-verify.mjs --advanced`: five distinct Advanced placements
+  completed with all reference tests passing, followed by a visible rank. Increasing
+  Subsequence, Edit Distance and Weighted Schedule each have two public and seven hidden
+  tests, including maximum-size inputs. References run only inside the sandboxed judge.
+  The seed migration was reapplied without duplicates. The regular database still needs 011.
 
 ## Remaining before merge
 
@@ -51,8 +57,8 @@ port 55432. The regular database on port 5432 was not changed.
    surrender, profile navigation, practice run/guest draft, placement UI, and newcomer routing.
 2. Exercise disconnect/recovery, duplicate ranked submission feedback, and final mock regression.
    The 409 placement API check is not a substitute for ranked UI verification.
-3. Add/review three more Advanced problems: the current seed has only two and placements
-   require five distinct problems. Do not silently reuse problems or grant a rank early.
+3. Apply migration 011 to the intended local/staging database before Advanced onboarding.
+   The disposable test database is updated; the regular database is deliberately untouched.
 4. Recheck production sign-in UI and dev-callback 404 after the final changes.
 5. Real Google/GitHub staging OAuth still needs provider credentials and callback URLs.
 6. Update README in its own commit after final integration, then merge the verified branch.
@@ -72,3 +78,15 @@ npx next dev -p 3011
 
 In another terminal run `node test-support/track-d-verify.mjs`. It creates uniquely named
 test accounts in that disposable database. Retain the volume while resuming browser QA.
+
+For an existing verification volume, apply the new content once (it is repeatable), then
+check the Advanced references and five-problem progression:
+
+```powershell
+docker compose -p codeduel-track-d-verification -f test-support/compose.track-c.yml exec -T db psql -v ON_ERROR_STOP=1 -U codeduel -d codeduel -f /docker-entrypoint-initdb.d/011_advanced_placement_problems.sql
+node test-support/track-d-verify.mjs --advanced
+```
+
+Migration mounts run automatically only for an empty PostgreSQL volume. For a non-test
+database, take a backup and confirm the intended Compose project before applying 011;
+do not delete its volume just to run migrations.

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import pg from 'pg';
 const base='http://localhost:3011';
+const difficulty=process.argv.includes('--advanced')?'advanced':'medium';
 const db=new pg.Client({connectionString:'postgresql://codeduel:codeduel_local_only@localhost:55432/codeduel'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let checked=0;
@@ -38,19 +39,29 @@ try{
   const result=await until(()=>req(a,'GET',`/api/practice/runs/${run.id}`),r=>!['queued','running'].includes(r.verdict));
   assert.equal(result.verdict,'accepted');assert.equal(result.testsTotal,2);assert.deepEqual(await counts(),before);
   console.log('PASS public catalog, owned practice result, two-test judging, no ranked writes');
-  await db.query("UPDATE user_difficulty_ratings SET placement_matches_completed=0,visible_tier=NULL,visible_division=NULL WHERE user_id=$1 AND difficulty='medium'",[me.user.id]);
+  await db.query("UPDATE user_difficulty_ratings SET placement_matches_completed=0,visible_tier=NULL,visible_division=NULL WHERE user_id=$1 AND difficulty=$2",[me.user.id,difficulty]);
+  const seen=new Set();
   for(let n=1;n<=5;n++){
-    const created=await req(a,'POST','/api/placements',{difficulty:'medium'},201);
-    const resumed=await req(a,'POST','/api/placements',{difficulty:'medium'});assert.deepEqual(resumed,created);
-    const attempt=await req(a,'GET',`/api/placements/${created.attempt.id}`);assert.equal(attempt.placementNumber,n);assert.equal(attempt.problem.difficulty,'medium');
+    const created=await req(a,'POST','/api/placements',{difficulty},201);
+    const resumed=await req(a,'POST','/api/placements',{difficulty});assert.deepEqual(resumed,created);
+    const attempt=await req(a,'GET',`/api/placements/${created.attempt.id}`);assert.equal(attempt.placementNumber,n);assert.equal(attempt.problem.difficulty,difficulty);
+    assert(!seen.has(attempt.problem.id),'Placement problem repeated');seen.add(attempt.problem.id);
     await req(b,'GET',`/api/placements/${attempt.id}`,undefined,404);
-    await req(a,'POST',`/api/placements/${attempt.id}/submissions`,{sourceCode:attempt.problem.starterCode},202);
+    // Test references only through the isolated judge, never execute them on the host.
+    const sourceCode=difficulty==='advanced'?(await db.query('SELECT reference_solution FROM problems WHERE id=$1',[attempt.problem.id])).rows[0].reference_solution:attempt.problem.starterCode;
+    await req(a,'POST',`/api/placements/${attempt.id}/submissions`,{sourceCode},202);
     await req(a,'POST',`/api/placements/${attempt.id}/submissions`,{sourceCode:attempt.problem.starterCode},409);
     const judged=await until(()=>req(a,'GET',`/api/placements/${attempt.id}`),r=>r.status==='completed');assert(judged.result);
+    if(difficulty==='advanced'){
+      assert(judged.result.testsTotal>0);
+      if(['increasing-subsequence','edit-distance','weighted-schedule'].includes(attempt.problem.slug))assert.equal(judged.result.testsTotal,9);
+      assert.equal(judged.result.testsPassed,judged.result.testsTotal,`Reference failed: ${attempt.problem.slug}`);
+    }
+    console.log(`PASS ${difficulty} placement ${n}: ${attempt.problem.slug}`);
   }
-  const state=await req(a,'GET','/api/placements');assert.equal(state.progress.find(p=>p.difficulty==='medium').placementsCompleted,5);
-  assert(state.progress.find(p=>p.difficulty==='medium').rank);
-  await req(a,'POST','/api/placements',{difficulty:'medium'},409);
+  const state=await req(a,'GET','/api/placements');assert.equal(state.progress.find(p=>p.difficulty===difficulty).placementsCompleted,5);
+  assert(state.progress.find(p=>p.difficulty===difficulty).rank);
+  await req(a,'POST','/api/placements',{difficulty},409);
   await req(b,'GET',`/api/players/${me.user.handle}`);
   console.log('PASS five judged placements, resume contract, ownership, duplicate 409, public rank');
   console.log(`PASS ${checked} HTTP responses inspected for private rating and solution fields`);
