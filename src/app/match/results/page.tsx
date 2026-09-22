@@ -33,9 +33,9 @@ function MatchResultsContent() {
   const nextRoundId = match?.activeRound && match.activeRound.id !== roundId ? match.activeRound.id : null;
 
   useEffect(() => {
-    if (!matchId || !nextRoundId) return;
+    if (!matchId || !nextRoundId || status !== "active") return;
     router.replace(`/match/round?matchId=${matchId}&roundId=${nextRoundId}`);
-  }, [matchId, nextRoundId, router]);
+  }, [matchId, nextRoundId, router, status]);
 
   useEffect(() => {
     if (!matchId || status !== "completed") return;
@@ -139,7 +139,7 @@ function MatchResultsContent() {
         <p className="mt-8 rounded-xl bg-[#f4f4f1] p-5 text-sm text-black/60">Wrapping up the match…</p>
       )}
 
-      <Link href="/queue" className="mt-6 block text-center text-xs font-bold text-black/45 hover:text-black">Leave match</Link>
+      <Link href={`/match/surrender?matchId=${matchId}`} className="mt-6 block text-center text-xs font-bold text-black/45 hover:text-black">Surrender match</Link>
     </Shell>
   );
 }

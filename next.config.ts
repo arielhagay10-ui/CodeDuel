@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Separate localhost/loopback cookies allow two-player local browser tests.
+  allowedDevOrigins: ["127.0.0.1"],
   async headers() {
     return [{
       source: "/:path*",

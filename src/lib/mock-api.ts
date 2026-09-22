@@ -288,6 +288,7 @@ export const mockApi: MatchApi = {
   async getQueue(): Promise<QueueState> {
     await wait();
     const current = tick();
+    if (current.match?.status === "completed") return { status: "idle" };
     save();
     return toQueueState(current);
   },
@@ -295,6 +296,7 @@ export const mockApi: MatchApi = {
   async joinQueue(difficulty: Difficulty): Promise<QueueState> {
     await wait();
     const current = tick();
+    if (current.match?.status === "completed") { current.queue=emptyState().queue; current.match=null; }
     if (current.queue.status === "idle") {
       current.queue = {
         status: "queued",
@@ -325,9 +327,11 @@ export const mockApi: MatchApi = {
 
   async getRound(roundId: string): Promise<RoundState> {
     await wait();
-    const { round } = requireRound(roundId);
+    const { round, match } = requireRound(roundId);
     save();
-    return toRoundState(round);
+    const value=toRoundState(round);
+    if(value.problem)value.problem={...value.problem,difficulty:match.difficulty};
+    return value;
   },
 
   async getDraft(roundId: string): Promise<DraftState> {

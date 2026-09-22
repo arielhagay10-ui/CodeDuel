@@ -85,7 +85,8 @@ function sweep(now: number) {
 }
 
 function enforceRateLimit(request: NextRequest) {
-  const policy = limitFor(request.nextUrl.pathname);
+  // Read polling must not consume the much smaller mutation budgets.
+  const policy = safeMethods.has(request.method) ? defaultLimit : limitFor(request.nextUrl.pathname);
   const now = Date.now();
   sweep(now);
   const key = `${rateLimitKey(request)}:${policy.route}`;
@@ -112,7 +113,10 @@ function guardApi(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/auth/")) return NextResponse.next();
   if (safeMethods.has(request.method)) return NextResponse.next();
   const origin = request.headers.get("origin");
-  if (!origin || origin !== request.nextUrl.origin) {
+  // Next normalizes loopback aliases in nextUrl. Host preserves the browser's
+  // actual target; compare the full origin, not a cross-origin allowlist.
+  const targetOrigin = new URL(`${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`).origin;
+  if (!origin || origin !== targetOrigin) {
     return NextResponse.json({ error: "Cross-site requests are not allowed." }, { status: 403 });
   }
   return NextResponse.next();

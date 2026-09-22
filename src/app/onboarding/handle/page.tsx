@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { api } from "@/lib/api-client";
 
 const validHandle = /^[A-Za-z0-9](?:[A-Za-z0-9_]{1,22}[A-Za-z0-9])?$/;
 
@@ -21,13 +22,12 @@ export default function HandleOnboardingPage() {
   const canClaim = handle.length > 0 && !message && !pending;
 
   async function claimHandle() {
+    if (pending) return;
     setPending(true);
     setServerError(null);
-    const response = await fetch("/api/onboarding/handle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ handle }) });
-    const data = await response.json() as { error?: string };
-    setPending(false);
-    if (!response.ok) { setServerError(data.error ?? "Could not claim that handle."); return; }
-    setClaimed(true);
+    try { await api.claimHandle(handle); setClaimed(true); }
+    catch (error) { setServerError(error instanceof Error ? error.message : "Could not claim that handle."); }
+    finally { setPending(false); }
   }
 
   return (

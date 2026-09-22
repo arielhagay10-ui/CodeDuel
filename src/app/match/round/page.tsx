@@ -27,7 +27,8 @@ function MatchRoundContent() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const loadedRound = useRef<string | null>(null);
+  const [loadedRound, setLoadedRound] = useState<string | null>(null);
+  const codeRef = useRef<string | null>(null);
 
   const problem = round?.problem ?? null;
   const starterCode = problem?.starterCode ?? null;
@@ -39,13 +40,14 @@ function MatchRoundContent() {
   // starter code only when the server has nothing keeps a slow response from
   // silently wiping work.
   useEffect(() => {
-    if (!roundId || starterCode === null || loadedRound.current === roundId) return;
-    loadedRound.current = roundId;
+    if (!roundId || starterCode === null || loadedRound === roundId) return;
+    let cancelled = false;
     void api
       .getDraft(roundId)
-      .then((draft) => setCode(draft.sourceCode ?? starterCode))
-      .catch(() => setCode(starterCode));
-  }, [roundId, starterCode]);
+      .then((draft) => { if (!cancelled) { setLoadedRound(roundId); codeRef.current=draft.sourceCode??starterCode; setCode(codeRef.current); } })
+      .catch(() => { if (!cancelled) { setNotice("Could not restore your draft. Refresh to retry; editing is disabled to protect saved work."); } });
+    return () => { cancelled = true; };
+  }, [roundId, starterCode, loadedRound]);
 
   // The worker submits the last *saved* draft when the timer expires, so an
   // unsaved buffer at 0:00 means the player's real work is thrown away.
@@ -54,8 +56,8 @@ function MatchRoundContent() {
     const timer = window.setTimeout(() => {
       void api
         .saveDraft(roundId, code)
-        .then(() => setSaveState("saved"))
-        .catch(() => setSaveState("failed"));
+        .then(() => { if(codeRef.current===code)setSaveState("saved"); })
+        .catch(() => { if(codeRef.current===code)setSaveState("failed"); });
     }, AUTOSAVE_MS);
     return () => window.clearTimeout(timer);
   }, [code, locked, roundId, saveState]);
@@ -65,6 +67,10 @@ function MatchRoundContent() {
     if (!round?.revealed || !matchId || !roundId) return;
     router.replace(`/match/results?matchId=${matchId}&roundId=${roundId}`);
   }, [matchId, round?.revealed, roundId, router]);
+
+  useEffect(() => {
+    if(matchId&&match?.status==="completed"&&!round?.revealed)router.replace(`/match/complete?matchId=${matchId}`);
+  },[matchId,match?.status,round?.revealed,router]);
 
   async function submit() {
     if (!roundId || code === null) return;
@@ -92,8 +98,8 @@ function MatchRoundContent() {
   if (!round) {
     return <Notice body={error ?? "Loading the round…"} />;
   }
-  if (!problem || code === null) {
-    return <Notice body="Waiting for the round to start…" />;
+  if (!problem || code === null || loadedRound !== roundId) {
+    return <Notice body={notice ?? "Waiting for the round to start…"} />;
   }
 
   const opponentHandle = match ? `@${match.opponent.handle}` : "your opponent";
@@ -170,7 +176,7 @@ function MatchRoundContent() {
             label="Match code editor"
             value={code}
             disabled={locked || expired}
-            onChange={(next) => { setCode(next); setSaveState("pending"); }}
+            onChange={(next) => { codeRef.current=next; setCode(next); setSaveState("pending"); }}
           />
 
           {notice && <p className="mt-4 rounded-xl border border-[#f3a08c] bg-[#3a1b13] p-4 text-sm text-[#f8d4c9]">{notice}</p>}
@@ -190,6 +196,7 @@ function MatchRoundContent() {
           </div>
 
           <div className="mt-4 flex justify-end">
+            <Link href={`/match/surrender?matchId=${matchId}`} className="mr-auto px-3 py-3 text-sm text-white/70 underline">Surrender</Link>
             <button
               onClick={() => void submit()}
               disabled={locked || expired || submitting}

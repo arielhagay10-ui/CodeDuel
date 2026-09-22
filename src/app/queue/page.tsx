@@ -1,51 +1,22 @@
 "use client";
-
 import Link from "next/link";
+import { useEffect,useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-
-import { ApiRequestError, api } from "@/lib/api-client";
-import type { Difficulty as RankedDifficulty, QueueState } from "@/types/api";
-
-type Difficulty = "Easy" | "Medium" | "Advanced";
-type QueuePhase = QueueState["status"];
-const modes: Record<Difficulty, { key: RankedDifficulty; format: string; description: string }> = {
-  Easy: { key: "easy", format: "Best of 3 · 5 min rounds", description: "Core patterns, clean implementation, and quick decisions." },
-  Medium: { key: "medium", format: "Best of 3 · 10 min rounds", description: "Data structures, graphs, and sharper problem solving." },
-  Advanced: { key: "advanced", format: "First solve · 20 min", description: "Deep algorithms. One hard problem decides the match." },
-};
-
-export default function RankedQueuePage() {
-  const router = useRouter();
-  const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
-  const [state, setState] = useState<QueuePhase>("idle");
-  const [elapsed, setElapsed] = useState(0);
-  const [notice, setNotice] = useState<string | null>(null);
-  const mode = modes[difficulty];
-
-  const checkQueue = useCallback(async () => {
-    const queue = await api.getQueue().catch(() => null);
-    if (queue?.status !== "matched" || !queue.matchId) return;
-    setState("matched");
-    router.push(`/match/lobby?matchId=${queue.matchId}`);
-  }, [router]);
-  useEffect(() => {
-    if (state !== "queued") return;
-    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
-    const poll = window.setInterval(() => void checkQueue(), 3000);
-    return () => { window.clearInterval(timer); window.clearInterval(poll); };
-  }, [checkQueue, state]);
-  async function joinQueue() {
-    setNotice(null);
-    try {
-      const queue = await api.joinQueue(mode.key);
-      if (queue.matchId) { router.push(`/match/lobby?matchId=${queue.matchId}`); return; }
-      setElapsed(0); setState("queued");
-    } catch (cause) {
-      setNotice(cause instanceof ApiRequestError ? cause.message : "Could not join the queue.");
-    }
-  }
-  async function leaveQueue() { await api.leaveQueue().catch(() => undefined); setState("idle"); setElapsed(0); }
-
-  return <main className="min-h-screen bg-[#f7f7f5] text-[#161616]"><header className="border-b border-black/10 bg-white"><div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6"><Link href="/" className="text-xl font-bold tracking-[-0.06em]">CodeDuel<span className="text-[#ed5b39]">.</span></Link><p className="text-xs font-bold text-black/45">Ranked · Python</p></div></header><section className="mx-auto max-w-5xl px-6 py-12 sm:py-16"><div className="grid gap-8 lg:grid-cols-[1.3fr_.7fr]"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ed5b39]">Ranked duel</p><h1 className="mt-3 text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">Choose your arena.</h1><p className="mt-4 max-w-xl text-sm leading-6 text-black/60">You will be paired with a nearby-rated player in the same difficulty queue.</p><div className="mt-8 grid gap-3 sm:grid-cols-3">{(Object.keys(modes) as Difficulty[]).map((item) => <button key={item} disabled={state !== "idle"} onClick={() => setDifficulty(item)} className={`rounded-xl border p-4 text-left transition disabled:cursor-not-allowed ${difficulty === item ? "border-[#ed5b39] bg-[#ed5b39] text-white" : "border-black/10 bg-white hover:border-black/35"}`}><p className="font-bold">{item}</p><p className={`mt-1 text-xs ${difficulty === item ? "text-white/70" : "text-black/45"}`}>{modes[item].format}</p></button>)}</div><div className="mt-5 rounded-xl border border-black/10 bg-white p-5"><p className="text-lg font-bold">{difficulty} queue</p><p className="mt-1 text-sm text-black/55">{mode.description}</p></div>{notice && <p className="mt-5 rounded-lg bg-[#fff0ed] p-4 text-sm text-[#c73d25]">{notice}</p>}</div><aside className="rounded-2xl bg-[#161616] p-6 text-white sm:p-8"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ed5b39]">{state === "queued" ? "Searching" : "Ready when you are"}</p>{state === "queued" ? <><div className="mt-8 grid h-20 w-20 place-items-center rounded-full border-2 border-[#ed5b39] text-xl font-semibold">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}</div><h2 className="mt-7 text-2xl font-semibold tracking-[-0.04em]">Finding your opponent…</h2><p className="mt-3 text-sm leading-6 text-white/60">Searching the {difficulty} queue by hidden rating.</p><button onClick={() => void leaveQueue()} className="mt-8 w-full rounded-lg border border-white/25 px-4 py-3 text-sm font-bold hover:border-white">Leave queue</button></> : <><h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">A fair match awaits.</h2><p className="mt-3 text-sm leading-6 text-white/60">Same problems, server-side hidden tests, and no result until both players submit.</p><button onClick={() => void joinQueue()} className="mt-8 w-full rounded-lg bg-[#ed5b39] px-4 py-3 text-sm font-bold text-white hover:bg-[#d84c2b]">Find an opponent</button></>}</aside></div></section></main>;
+import { AppShell,buttonClass,ErrorNotice } from "@/components/app-shell";
+import { api } from "@/lib/api-client";
+import { useResource } from "@/lib/hooks/use-resource";
+import { difficultyLabel,rankLabel } from "@/lib/match-view";
+import type { Difficulty } from "@/types/api";
+export default function Queue(){
+  const router=useRouter();const {data:queue,error,refresh}=useResource("queue",api.getQueue,3000);
+  const {data:ratings}=useResource("ratings",api.getRatings);
+  const [difficulty,setDifficulty]=useState<Difficulty>("medium"),[busy,setBusy]=useState(false),[notice,setNotice]=useState<string|null>(null);
+  const selected=ratings?.ratings.find(r=>r.difficulty===difficulty);
+  useEffect(()=>{if(queue?.matchId)router.replace(`/match/lobby?matchId=${queue.matchId}`);},[queue?.matchId,router]);
+  async function join(){if(busy)return;setBusy(true);setNotice(null);try{const next=await api.joinQueue(difficulty);if(next.matchId)router.push(`/match/lobby?matchId=${next.matchId}`);else refresh();}catch(e){setNotice(e instanceof Error?e.message:"Unable to join.");}finally{setBusy(false);}}
+  async function leave(){setBusy(true);try{await api.leaveQueue();refresh();}catch(e){setNotice(e instanceof Error?e.message:"Unable to leave.");}finally{setBusy(false);}}
+  return <AppShell><h1 className="text-4xl font-semibold">Choose your arena.</h1><p className="my-4 text-black/60">Complete placements, then match with an opponent in the same difficulty.</p><ErrorNotice message={notice??error}/>
+    <div className="my-7 grid gap-4 sm:grid-cols-3">{(["easy","medium","advanced"] as Difficulty[]).map(d=><button key={d} disabled={busy||queue?.status==="queued"} onClick={()=>setDifficulty(d)} className={`rounded-xl border p-6 text-left ${d===difficulty?"bg-[#ed5b39] text-white":"bg-white"}`}><span className="block text-xl font-bold">{difficultyLabel(d)}</span><span className="text-sm">{d==="advanced"?"One round · 20 minutes":`Up to 3 rounds · ${d==="easy"?5:10} minutes each`}</span></button>)}</div>
+    {queue?.status==="queued"?<section role="status" className="rounded-xl bg-white p-8"><h2 className="text-2xl font-bold">Finding your opponent…</h2><p className="my-4">Searching the {queue.difficulty??difficulty} queue.</p><button disabled={busy} onClick={()=>void leave()} className={buttonClass}>Leave queue</button></section>:<section className="rounded-xl bg-white p-8"><h2 className="text-2xl font-bold">{selected?rankLabel(selected.rank):"Ranked play"}</h2>{selected&&selected.placementsCompleted<5&&process.env.NEXT_PUBLIC_MOCK_API!=="1"?<><p className="my-4">{selected.placementsCompleted}/5 placements completed.</p><Link className={buttonClass} href="/onboarding/placement">Complete placements</Link></>:<button className={buttonClass+" mt-5"} disabled={busy||!queue||!!error} onClick={()=>void join()}>{busy?"Joining…":"Find an opponent"}</button>}</section>}
+  </AppShell>;
 }

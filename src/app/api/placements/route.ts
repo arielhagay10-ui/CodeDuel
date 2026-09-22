@@ -43,7 +43,11 @@ export async function POST(request: Request) {
   try {
     await client.query("BEGIN");
     const active = await client.query<{ id: string; placement_number: number; problem_id: string; ends_at: string }>("SELECT id, placement_number, problem_id, ends_at FROM placement_attempts WHERE user_id = $1 AND difficulty = $2 AND status = 'active' ORDER BY placement_number LIMIT 1 FOR UPDATE", [userId, difficulty]);
-    if (active.rowCount) { await client.query("COMMIT"); return NextResponse.json({ attempt: active.rows[0] }); }
+    if (active.rowCount) {
+      await client.query("COMMIT");
+      const item = active.rows[0];
+      return NextResponse.json({ attempt: { id: item.id, placementNumber: item.placement_number, problemId: item.problem_id, endsAt: item.ends_at } });
+    }
     const rating = await client.query<{ placement_matches_completed: number }>("SELECT placement_matches_completed FROM user_difficulty_ratings WHERE user_id = $1 AND difficulty = $2 FOR UPDATE", [userId, difficulty]);
     const completed = rating.rows[0]?.placement_matches_completed ?? 0;
     if (completed >= 5) { await client.query("ROLLBACK"); return NextResponse.json({ error: "Placements are already complete." }, { status: 409 }); }

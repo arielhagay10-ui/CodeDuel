@@ -1,41 +1,44 @@
 "use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-
+import { useEffect,useState } from "react";
+import { AppShell,buttonClass,ErrorNotice } from "@/components/app-shell";
+import { ProblemPanel } from "@/components/problem-panel";
 import { CodeEditor } from "@/components/code-editor";
-
-const starter = `def pair_indices(numbers, target):\n    # Return the indices of two values whose sum is target.\n    pass\n`;
-
-function formatTime(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+import { api } from "@/lib/api-client";
+import { useResource } from "@/lib/hooks/use-resource";
+import { formatClock,verdictLabel } from "@/lib/match-view";
+import type { PracticeRun,RoundProblem } from "@/types/api";
+async function loadPractice(){const [catalog,account]=await Promise.all([api.getProblems(),api.getMe()]);return {...catalog,...account};}
+export default function PracticePage(){
+  const {data,error}=useResource("practice",loadPractice);const [selected,setSelected]=useState("");
+  const problem=data?.problems.find(p=>p.id===selected)??data?.problems[0];
+  return <AppShell><h1 className="mb-5 text-3xl font-semibold">Practice</h1><ErrorNotice message={error}/>
+    {!data&&!error&&<p>Loading published problems…</p>}
+    {data&&<label className="mb-6 block">Choose a problem<select className="ml-3 max-w-full rounded border bg-white p-3" value={problem?.id??""} onChange={e=>setSelected(e.target.value)}>{data.problems.map(p=><option key={p.id} value={p.id}>{p.title} · {p.difficulty}</option>)}</select></label>}
+    {data&&!problem&&<p>No published problems are available.</p>}
+    {problem&&data&&<PracticeEditor key={problem.id+String(data.user?.id)} problem={problem} userId={data.user?.id??null}/>}
+  </AppShell>;
 }
-
-export default function PracticePage() {
-  const [secondsLeft, setSecondsLeft] = useState(600);
-  const [running, setRunning] = useState(true);
-  const [code, setCode] = useState(starter);
-  const [result, setResult] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!running || secondsLeft === 0) return;
-    const interval = window.setInterval(() => setSecondsLeft((value) => value - 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [running, secondsLeft]);
-
-  const runSample = () => {
-    setResult("Sample run queued. The secure Python judge will execute this code once the judging service is connected.");
-  };
-
-  return (
-    <main className="min-h-screen bg-[#f7f7f5] text-[#161616]">
-      <header className="border-b border-black/10 bg-white"><div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-5 sm:px-8"><Link className="text-xl font-bold tracking-[-0.06em]" href="/">CodeDuel<span className="text-[#ed5b39]">.</span></Link><div className="flex items-center gap-4"><span className={`font-mono text-lg font-semibold ${secondsLeft < 60 ? "text-[#c73d25]" : ""}`}>{formatTime(secondsLeft)}</span><button onClick={() => setRunning(!running)} className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-bold">{running ? "Pause" : "Resume"}</button><button onClick={() => { setRunning(false); setSecondsLeft(600); setCode(starter); setResult(null); }} className="text-xs font-bold text-black/50 hover:text-black">Restart</button></div></div></header>
-      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[minmax(360px,0.9fr)_minmax(460px,1.1fr)]">
-        <article className="border-b border-black/10 bg-white px-6 py-8 lg:min-h-[calc(100vh-64px)] lg:border-r lg:border-b-0 lg:px-10"><div className="max-w-xl"><div className="flex items-center gap-3"><span className="rounded-full bg-[#fbebe5] px-3 py-1 text-xs font-bold text-[#c73d25]">Medium</span><span className="text-xs font-medium text-black/45">Arrays · Hash maps</span></div><h1 className="mt-6 text-4xl font-semibold tracking-[-0.05em]">Pair Indices</h1><p className="mt-6 leading-7 text-black/70">Given a list of integers and a target, return the indices of the two different values that add up to the target.</p><p className="mt-4 leading-7 text-black/70">You may assume exactly one valid pair exists. Return the smaller index first.</p><section className="mt-8"><h2 className="text-sm font-bold uppercase tracking-[0.14em] text-black/45">Example</h2><pre className="mt-3 overflow-x-auto rounded-xl bg-[#f4f4f1] p-4 font-mono text-sm leading-6">{`numbers = [2, 7, 11, 15]\ntarget = 9\n\npair_indices(numbers, target)\n# [0, 1]`}</pre></section><section className="mt-8"><h2 className="text-sm font-bold uppercase tracking-[0.14em] text-black/45">Constraints</h2><ul className="mt-3 space-y-2 text-sm leading-6 text-black/65"><li>• 2 ≤ len(numbers) ≤ 100,000</li><li>• -1,000,000,000 ≤ numbers[i] ≤ 1,000,000,000</li><li>• Aim for O(n) time complexity.</li></ul></section><button className="mt-10 text-sm font-bold text-black/60 underline decoration-black/25 underline-offset-4 hover:text-black">Give up and view explanation</button></div></article>
-        <section className="flex min-h-[620px] flex-col bg-[#171717] p-4 sm:p-6"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><span className="rounded bg-[#2c2c2c] px-2.5 py-1.5 text-xs font-medium text-white">Python 3.12</span><span className="text-xs text-white/40">main.py</span></div><span className="text-xs text-white/45">Autosaved</span></div><CodeEditor label="Python code editor" value={code} onChange={setCode} /><div className="mt-4 rounded-xl border border-white/10 bg-[#111] p-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-[0.14em] text-white/45">Output</p><p className="text-xs text-white/35">Public test only</p></div><p className="mt-3 min-h-10 font-mono text-sm text-white/70">{result ?? "Run your solution to test it against the example."}</p></div><div className="mt-4 flex justify-end gap-3"><button onClick={runSample} className="rounded-lg border border-white/20 px-4 py-2.5 text-sm font-bold text-white hover:border-white/60">Run sample</button><button onClick={runSample} className="rounded-lg bg-[#ed5b39] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#d84c2b]">Submit solution</button></div></section>
-      </div>
-    </main>
-  );
+function PracticeEditor({problem,userId}:{problem:RoundProblem;userId:string|null}) {
+  const storageKey=`codeduel.practice.${userId??"guest"}.${problem.id}`;
+  const [code,setCode]=useState(()=>{try{return localStorage.getItem(storageKey)??problem.starterCode;}catch{return problem.starterCode;}});
+  const [seconds,setSeconds]=useState(600),[paused,setPaused]=useState(false),[busy,setBusy]=useState(false);
+  const [result,setResult]=useState<PracticeRun|null>(null),[error,setError]=useState<string|null>(null),[saved,setSaved]=useState("Drafts stay on this device.");
+  useEffect(()=>{if(paused)return;const timer=setInterval(()=>setSeconds(s=>Math.max(0,s-1)),1000);return()=>clearInterval(timer);},[paused]);
+  useEffect(()=>{
+    if(!result||!["queued","running"].includes(result.verdict))return;
+    let stopped=false;let timer:ReturnType<typeof setTimeout>;
+    const poll=async()=>{try{const next=await api.getPractice(result.id);if(stopped)return;
+      if(["queued","running"].includes(next.verdict))timer=setTimeout(poll,2000);
+      else {setResult(next);try{localStorage.setItem(storageKey+".result",JSON.stringify(next));}catch{/* optional history */}}
+    }catch(e){if(!stopped){setError(e instanceof Error?e.message:"Result unavailable; retry polling.");timer=setTimeout(poll,5000);}}};
+    timer=setTimeout(poll,1000);return()=>{stopped=true;clearTimeout(timer);};
+  },[result,storageKey]);
+  async function run(){if(!userId||busy)return;setBusy(true);setError(null);try{setResult(await api.runPractice(problem.slug,code));}catch(e){setError(e instanceof Error?e.message:"Run failed.");}finally{setBusy(false);}}
+  return <div className="grid gap-6 lg:grid-cols-2"><ProblemPanel problem={problem}/><section className="rounded-xl bg-[#171717] p-6 text-white">
+    <div className="mb-4 flex items-center justify-between"><span className="font-mono">{formatClock(seconds)}</span><button onClick={()=>setPaused(p=>!p)}>{paused?"Resume timer":"Pause timer"}</button></div>
+    <CodeEditor label="Practice code editor" value={code} onChange={value=>{setCode(value);try{localStorage.setItem(storageKey,value);setSaved("Saved on this device");}catch{setSaved("Storage unavailable — keep this tab open");}}}/><p className="my-3 text-xs text-white/60">{saved}</p>
+    <ErrorNotice message={error}/><p role="status" className="my-4">{result?`${verdictLabel(result.verdict)} · ${result.testsPassed}/${result.testsTotal} public tests`:"Run your solution against public examples. Results do not affect rank."}</p>
+    {userId?<button className={buttonClass} disabled={busy||!!result&&["queued","running"].includes(result.verdict)} onClick={()=>void run()}>{busy?"Queuing…":"Run public tests"}</button>:<Link href="/sign-in" className="underline">Sign in to run Python</Link>}
+  </section></div>;
 }

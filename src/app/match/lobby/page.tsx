@@ -21,9 +21,9 @@ function MatchLobbyContent() {
   // The round starting is the only exit from this page. A refresh mid-match
   // lands here with the match already active, and takes the same path out.
   useEffect(() => {
-    if (!matchId || !activeRoundId) return;
+    if (!matchId || !activeRoundId || status !== "active") return;
     router.replace(`/match/round?matchId=${matchId}&roundId=${activeRoundId}`);
-  }, [activeRoundId, matchId, router]);
+  }, [activeRoundId, matchId, router, status]);
 
   useEffect(() => {
     if (!matchId || status !== "completed") return;
@@ -118,7 +118,7 @@ function MatchLobbyContent() {
         {match.opponentReady ? `@${match.opponent.handle} is ready.` : `@${match.opponent.handle} has not readied up yet.`}
       </p>
 
-      <Link href="/queue" className="mt-5 block text-center text-xs font-bold text-black/45 hover:text-black">Leave match</Link>
+      <Link href={`/match/surrender?matchId=${matchId}`} className="mt-5 block text-center text-xs font-bold text-black/45 hover:text-black">Surrender match</Link>
     </Shell>
   );
 }

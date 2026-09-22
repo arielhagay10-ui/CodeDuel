@@ -12,13 +12,14 @@ const TICK_MS = 1_000;
 export type Polled<T> = {
   data: T | null;
   error: string | null;
+  failures: number;
   refresh: () => Promise<void>;
   /** Seconds remaining until an ISO timestamp, corrected for server clock skew. */
   secondsUntil: (iso: string | null) => number | null;
 };
 
 /** Tagged with the id it came from, so navigating to a new round never shows the old one. */
-type Entry<T> = { id: string; value: T | null; error: string | null };
+type Entry<T> = { id: string; value: T | null; error: string | null; failures: number };
 
 type Poller = { stop: () => void; refresh: () => Promise<void> };
 
@@ -79,11 +80,11 @@ function usePolled<T extends { serverTime: string }>(
 
   const handleValue = useCallback((target: string, value: T) => {
     sync(value.serverTime);
-    setEntry({ id: target, value, error: null });
+    setEntry({ id: target, value, error: null, failures: 0 });
   }, [sync]);
 
   const handleError = useCallback((target: string, message: string) => {
-    setEntry((previous) => ({ id: target, value: previous?.id === target ? previous.value : null, error: message }));
+    setEntry((previous) => ({ id: target, value: previous?.id === target ? previous.value : null, error: message, failures: previous?.id === target ? previous.failures + 1 : 1 }));
   }, []);
 
   useEffect(() => {
@@ -111,7 +112,7 @@ function usePolled<T extends { serverTime: string }>(
   // Derived rather than reset in an effect, so a stale value is never rendered
   // for even one frame after the id changes.
   const current = entry && entry.id === id ? entry : null;
-  return { data: current?.value ?? null, error: current?.error ?? null, refresh, secondsUntil };
+  return { data: current?.value ?? null, error: current?.error ?? null, failures: current?.failures ?? 0, refresh, secondsUntil };
 }
 
 const matchSettled = (match: MatchState) => match.status === "completed" || match.status === "cancelled";

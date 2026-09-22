@@ -7,6 +7,23 @@ import { proxy, rateLimitWindowCount } from "./proxy.ts";
 const origin = "http://localhost:3000";
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
+test("same-origin guard preserves loopback Host and rejects a foreign origin", () => {
+  const headers = { host: "127.0.0.1:3000", origin: "http://127.0.0.1:3000" };
+  assert.equal(proxy(new NextRequest(`${origin}/api/queue`, { method: "POST", headers })).status, 200);
+  assert.equal(proxy(new NextRequest(`${origin}/api/queue`, { method: "POST", headers: { ...headers, origin: "https://attacker.example" } })).status, 403);
+});
+
+test("queue polling does not consume the mutation budget", () => {
+  const headers = { origin, cookie: "next-auth.session-token=polling-test" };
+  for (let i = 0; i < 30; i++) {
+    assert.equal(proxy(new NextRequest(`${origin}/api/queue`, { headers })).status, 200);
+  }
+  for (let i = 0; i < 10; i++) {
+    assert.equal(proxy(new NextRequest(`${origin}/api/queue`, { method: "POST", headers })).status, 200);
+  }
+  assert.equal(proxy(new NextRequest(`${origin}/api/queue`, { method: "POST", headers })).status, 429);
+});
+
 function put(pathname: string, { session = "session-a", ip = "10.0.0.1" } = {}) {
   return new NextRequest(`${origin}${pathname}`, {
     method: "PUT",

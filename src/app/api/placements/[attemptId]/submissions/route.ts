@@ -20,5 +20,9 @@ export async function POST(request: Request, context: RouteContext<"/api/placeme
     await client.query("INSERT INTO judge_jobs (id, submission_id) VALUES ($1, $2)", [crypto.randomUUID(), submissionId]);
     await client.query("COMMIT");
     return NextResponse.json({ submissionId, locked: true }, { status: 202 });
-  } catch (caught) { await client.query("ROLLBACK"); throw caught; } finally { client.release(); }
+  } catch (caught) {
+    await client.query("ROLLBACK");
+    if ((caught as { code?: string }).code === "23505") return NextResponse.json({ error: "Your solution is already locked." }, { status: 409 });
+    throw caught;
+  } finally { client.release(); }
 }

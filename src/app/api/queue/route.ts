@@ -96,8 +96,12 @@ export async function POST(request: Request) {
 export async function GET() {
   const { userId, error } = await requireRankedUser();
   if (error) return error;
+  const match = await getDb().query<{ id: string; difficulty: Difficulty }>(
+    "SELECT id,difficulty FROM matches WHERE $1 IN (player_one_id,player_two_id) AND status IN ('waiting','active','between_rounds') ORDER BY created_at DESC LIMIT 1", [userId],
+  );
+  if (match.rowCount) return NextResponse.json({ status: "matched", matchId: match.rows[0].id, difficulty: match.rows[0].difficulty });
   const entry = await getDb().query<{ id: string; difficulty: Difficulty; enqueued_at: string; match_id: string | null }>(
-    "SELECT id, difficulty, enqueued_at, match_id FROM match_queue_entries WHERE user_id = $1 AND cancelled_at IS NULL ORDER BY enqueued_at DESC LIMIT 1",
+    "SELECT id, difficulty, enqueued_at, match_id FROM match_queue_entries WHERE user_id = $1 AND cancelled_at IS NULL AND matched_at IS NULL ORDER BY enqueued_at DESC LIMIT 1",
     [userId],
   );
   if (!entry.rowCount) return NextResponse.json({ status: "idle" });

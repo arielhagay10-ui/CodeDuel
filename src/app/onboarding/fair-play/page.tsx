@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { api } from "@/lib/api-client";
 
 export default function FairPlayPage() {
   const [agreed, setAgreed] = useState(false);
@@ -14,11 +15,9 @@ export default function FairPlayPage() {
     if (!agreed || pending) return;
     setPending(true);
     setError(null);
-    const response = await fetch("/api/onboarding/fair-play", { method: "POST" });
-    const data = await response.json() as { error?: string };
-    setPending(false);
-    if (!response.ok) { setError(data.error ?? "Could not record your agreement."); return; }
-    router.push("/onboarding/placement");
+    try { await api.acceptFairPlay(); router.push("/onboarding/placement"); }
+    catch (error) { setError(error instanceof Error ? error.message : "Could not record your agreement."); }
+    finally { setPending(false); }
   }
 
   return (

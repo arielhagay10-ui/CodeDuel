@@ -48,12 +48,12 @@ function MatchCompleteContent() {
       </div>
 
       <div className="mt-8 rounded-xl bg-[#f4f4f1] p-5">
-        <p className="font-semibold">{handle}</p>
+        <Link href={`/players/${encodeURIComponent(match.opponent.handle)}`} className="font-semibold underline">{handle}</Link>
         <p className="mt-1 text-sm text-black/60">{rankLabel(match.opponent.rank)} · {difficultyLabel(match.difficulty)}</p>
         <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
           <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
             <Link href="/" className="rounded-lg px-4 py-3 text-center text-sm font-bold text-black/60 hover:text-black">Back to dashboard</Link>
-            <Link href="/match/report" className="px-3 py-3 text-sm font-bold text-black/55 underline decoration-black/20 underline-offset-4 hover:text-black">Report player</Link>
+            <Link href={`/match/report?matchId=${matchId}`} className="px-3 py-3 text-sm font-bold text-black/55 underline decoration-black/20 underline-offset-4 hover:text-black">Report player</Link>
           </div>
           <Link href="/queue" className="rounded-lg bg-[#161616] px-5 py-3 text-center text-sm font-bold text-white hover:bg-[#ed5b39]">Back to the queue</Link>
         </div>
