@@ -35,8 +35,20 @@ port 55432. The regular database on port 5432 was not changed.
 - First submission locked its editor while the opponent saw status only, not results.
 - Round two used a saved draft and a deliberately shortened database deadline. Both clients
   displayed judged results, then readiness advanced both to round three.
-- Both players submitted round three. **Final completion UI was not inspected**: browser
-  approval became unavailable at that point. Do not count this as full D1 sign-off.
+- Both players submitted round three. On resuming authorized browser QA, both final-score
+  screens displayed the same 0–0 draw, correct opponents and visible ranks, without MMR.
+- A completed-match report displayed its saved confirmation. Opponent profiles showed
+  real rank/history data and a match-specific report link.
+- Signed-in practice displayed `Accepted · 2/2 public tests`. Signed-out practice allowed
+  editing, restored the guest draft after refresh, and required sign-in to run Python.
+- Surrender required confirmation and produced defeat/victory on the respective clients.
+- A disposable newcomer was routed to handle selection, then fair play. Claiming a handle
+  and accepting the rules led to 0/5 placement progress. An Advanced attempt displayed a
+  real problem/timer, restored its local draft on refresh, submitted, displayed its judged
+  result and advanced the overview to 1/5.
+- A further Advanced matchup was created for connection testing, but the browser approval
+  service hit a usage limit again before disconnect/recovery could be exercised. This is
+  still not full D1/D7 sign-off; do not merge solely on these partial browser results.
 - `node test-support/track-d-verify.mjs`: 52 successful HTTP checks, public catalog,
   two-public-test practice acceptance with no ranked writes, owned-resource isolation,
   five judged Medium placements, resume response consistency, duplicate 409 and visible rank.
@@ -53,8 +65,8 @@ port 55432. The regular database on port 5432 was not changed.
 
 ## Remaining before merge
 
-1. Resume authorized browser testing: inspect both final-score screens; verify report,
-   surrender, profile navigation, practice run/guest draft, placement UI, and newcomer routing.
+1. Finish placement browser QA: resume an active attempt from the overview and inspect
+   the final rank screen after all five attempts (five-attempt API progression already passes).
 2. Exercise disconnect/recovery, duplicate ranked submission feedback, and final mock regression.
    The 409 placement API check is not a substitute for ranked UI verification.
 3. Apply migration 011 to the intended local/staging database before Advanced onboarding.
