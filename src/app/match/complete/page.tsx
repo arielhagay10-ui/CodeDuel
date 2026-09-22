@@ -19,6 +19,13 @@ function MatchCompleteContent() {
 
   if (!matchId) return <Shell><p className="text-sm text-black/60">This link is missing a match.</p></Shell>;
   if (!match) return <Shell><p className="text-sm text-black/60">{error ?? "Loading the final score…"}</p></Shell>;
+  if (match.status !== "completed" || !match.outcome) {
+    const destination = match.activeRound && match.status === "active"
+      ? `/match/round?matchId=${matchId}&roundId=${match.activeRound.id}`
+      : `/match/lobby?matchId=${matchId}`;
+    return <Shell><p>{match.status === "cancelled" ? "This match was cancelled." : "This match has not finished yet."}</p>
+      <Link href={match.status === "cancelled" ? "/queue" : destination} className="mt-5 inline-block underline">{match.status === "cancelled" ? "Back to queue" : "Return to match"}</Link></Shell>;
+  }
 
   const handle = `@${match.opponent.handle}`;
   const summary =

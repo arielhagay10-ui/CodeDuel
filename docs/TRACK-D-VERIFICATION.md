@@ -63,6 +63,25 @@ port 55432. The regular database on port 5432 was not changed.
   tests, including maximum-size inputs. References run only inside the sandboxed judge.
   The seed migration was reapplied without duplicates. The regular database still needs 011.
 
+### Terminal follow-up after browser approval became unavailable
+
+- Added regression coverage for empty 201/204 responses, structured 409 errors, malformed
+  error bodies, network failures and stored practice-run validation. `npm test` now runs
+  correctly on Windows and passes 14 tests.
+- Practice now preserves the selected problem and last run ID/result on the device,
+  resumes queued-result polling on remount and clears a polling error after recovery.
+  Invalid stored data is ignored. These latest UI changes still need a browser regression.
+- The completion page no longer labels an active/cancelled match as a loss.
+- Placement starts use a transaction-scoped lock before checking for an existing attempt.
+  Five concurrent starts reused one attempt. Prototype-key difficulty values return 422.
+  The updated Advanced HTTP suite passed 59 checks and all five reference solutions.
+- Type generation, TypeScript, lint and the production build passed again.
+- `node test-support/track-d-production.mjs` passed: OAuth controls in server-rendered
+  HTML, no development form, nonce CSP without unsafe-eval, and four dev-auth 404 checks.
+  Server HTML checks are not interactive browser sign-off.
+- README setup now describes development sign-in, the 17-problem pool, practice auth,
+  safe migration application, separate test stack and remaining deployment dependencies.
+
 ## Remaining before merge
 
 1. Finish placement browser QA: resume an active attempt from the overview and inspect
@@ -71,9 +90,10 @@ port 55432. The regular database on port 5432 was not changed.
    The 409 placement API check is not a substitute for ranked UI verification.
 3. Apply migration 011 to the intended local/staging database before Advanced onboarding.
    The disposable test database is updated; the regular database is deliberately untouched.
-4. Recheck production sign-in UI and dev-callback 404 after the final changes.
+4. Recheck production sign-in interactions and the latest practice/completion changes in
+   the browser. Production HTML and dev-callback 404 assertions already pass.
 5. Real Google/GitHub staging OAuth still needs provider credentials and callback URLs.
-6. Update README in its own commit after final integration, then merge the verified branch.
+6. Merge only after remaining browser checks pass; README is updated in its own commit.
 
 ## Reproduce HTTP verification
 

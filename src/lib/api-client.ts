@@ -1,12 +1,11 @@
 /**
- * The only place in the browser bundle that calls `fetch`.
+ * The browser-facing API, using the shared HTTP transport for live requests.
  *
  * Pages talk to `api`, never to a URL. That keeps the mock and the live backend
  * interchangeable behind one flag, and it means a change to a route path is a
  * change to this file rather than a hunt through every page.
  */
 import type {
-  ApiError,
   Difficulty,
   DraftState,
   MatchState,
@@ -18,19 +17,9 @@ import type {
 } from "@/types/api";
 import type { AccountState, PlacementAttempt } from "@/lib/client-contracts";
 import { ApiRequestError } from "@/lib/api-error";
+import { request } from "@/lib/http-client";
 
 export { ApiRequestError };
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { cache: "no-store", ...init });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as ApiError | null;
-    throw new ApiRequestError(response.status, body?.error ?? "Request failed.");
-  }
-  if (response.status === 204) return undefined as T;
-  const body = await response.text();
-  return (body ? JSON.parse(body) : undefined) as T;
-}
 
 const json = (body: unknown): RequestInit => ({
   method: "POST",

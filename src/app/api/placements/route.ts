@@ -38,10 +38,13 @@ export async function POST(request: Request) {
   if (error) return error;
   const body: unknown = await request.json().catch(() => null);
   const difficulty = typeof body === "object" && body && "difficulty" in body ? (body as { difficulty?: unknown }).difficulty : null;
-  if (typeof difficulty !== "string" || !(difficulty in limits)) return NextResponse.json({ error: "Choose a valid difficulty." }, { status: 422 });
+  if (typeof difficulty !== "string" || !Object.hasOwn(limits, difficulty)) return NextResponse.json({ error: "Choose a valid difficulty." }, { status: 422 });
   const client = await getDb().connect();
   try {
     await client.query("BEGIN");
+    // Serialize starts from multiple tabs before checking for an active attempt.
+    // Row locks alone cannot lock an attempt that has not been created yet.
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`placement:${userId}:${difficulty}`]);
     const active = await client.query<{ id: string; placement_number: number; problem_id: string; ends_at: string }>("SELECT id, placement_number, problem_id, ends_at FROM placement_attempts WHERE user_id = $1 AND difficulty = $2 AND status = 'active' ORDER BY placement_number LIMIT 1 FOR UPDATE", [userId, difficulty]);
     if (active.rowCount) {
       await client.query("COMMIT");

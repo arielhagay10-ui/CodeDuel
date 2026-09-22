@@ -13,7 +13,7 @@ function scan(value){
 }
 async function req(cookie,method,path,body,status=200){
   const response=await fetch(base+path,{method,redirect:'manual',headers:{cookie,origin:base,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
-  const text=await response.text();assert.equal(response.status,status,`${method} ${path}: ${text}`);
+  const text=await response.text();assert([status].flat().includes(response.status),`${method} ${path}: expected ${status}, received ${response.status}: ${text}`);
   const value=text?JSON.parse(text):null;scan(value);checked++;return value;
 }
 async function login(handle){
@@ -40,9 +40,11 @@ try{
   assert.equal(result.verdict,'accepted');assert.equal(result.testsTotal,2);assert.deepEqual(await counts(),before);
   console.log('PASS public catalog, owned practice result, two-test judging, no ranked writes');
   await db.query("UPDATE user_difficulty_ratings SET placement_matches_completed=0,visible_tier=NULL,visible_division=NULL WHERE user_id=$1 AND difficulty=$2",[me.user.id,difficulty]);
+  for(const invalid of ['toString','constructor','__proto__'])await req(a,'POST','/api/placements',{difficulty:invalid},422);
   const seen=new Set();
   for(let n=1;n<=5;n++){
-    const created=await req(a,'POST','/api/placements',{difficulty},201);
+    const starts=await Promise.all(Array.from({length:n===1?5:1},()=>req(a,'POST','/api/placements',{difficulty},[200,201])));
+    const created=starts[0];assert(starts.every(s=>s.attempt.id===created.attempt.id),'Concurrent starts created different attempts');
     const resumed=await req(a,'POST','/api/placements',{difficulty});assert.deepEqual(resumed,created);
     const attempt=await req(a,'GET',`/api/placements/${created.attempt.id}`);assert.equal(attempt.placementNumber,n);assert.equal(attempt.problem.difficulty,difficulty);
     assert(!seen.has(attempt.problem.id),'Placement problem repeated');seen.add(attempt.problem.id);
