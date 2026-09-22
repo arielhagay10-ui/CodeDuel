@@ -18,8 +18,8 @@ section is the full stack.
 
 ### What you need
 
-Docker (running), and Node 20+ or [Bun](https://bun.sh). Both package managers work;
-`bun install` and `npm install` agree on this project.
+Docker (running), and Node 24 (the verified development/test runtime). Use `npm install`
+for dependencies. The Node tests use native TypeScript stripping and module hooks.
 
 The judge worker mounts the host Docker socket so it can launch a throwaway container per
 submission. That is local-development only — never expose that service.
@@ -35,6 +35,7 @@ Create `.env.local` in the repo root:
 ```
 DATABASE_URL=postgresql://codeduel:codeduel_local_only@localhost:5432/codeduel
 AUTH_SECRET=<run: openssl rand -base64 32>
+NEXTAUTH_URL=http://localhost:3000
 ```
 
 Leave the OAuth variables unset. Local sign-in does not use them (see step 4).
@@ -48,18 +49,21 @@ docker compose -f docker-compose.local.yml up -d db
 **The migrations only run once.** `db/migrations/` is mounted into
 `/docker-entrypoint-initdb.d`, and Postgres runs that directory exactly when it creates
 the data directory. On an existing volume your migrations are silently skipped, including
-the `009` problem seed — and an empty `problems` table makes `/api/queue` return 503
+the problem seeds — and an empty `problems` table makes `/api/queue` return 503
 before a match can start.
 
-Start clean with `docker compose -f docker-compose.local.yml down -v`, or apply one by
-hand:
+Do not delete an existing volume to run migrations. Back it up, confirm which migrations
+have already been applied, and apply missing files in order. For example, on an existing
+database already through migration 010:
 
 ```bash
 docker compose -f docker-compose.local.yml exec -T db \
-  psql -U codeduel -d codeduel < db/migrations/009_seed_problems.sql
+  psql -v ON_ERROR_STOP=1 -U codeduel -d codeduel -f /docker-entrypoint-initdb.d/011_advanced_placement_problems.sql
 ```
 
-Confirm the seed landed — you want 14 problems:
+Migration 010 creates the independent practice queue; 011 adds the missing Advanced
+placement problems. Fresh volumes run both automatically. Confirm all seeds landed —
+you want 17 problems: 6 Easy, 6 Medium, 5 Advanced:
 
 ```bash
 docker compose -f docker-compose.local.yml exec -T db \
@@ -92,25 +96,19 @@ A match needs two signed-in players. Outside production there is a credentials p
 that creates a fully ranked-eligible account from a handle, so you do not need to register
 OAuth apps to click through a local match.
 
-**It has no button on the sign-in page yet** — `/sign-in` offers only Google and GitHub.
-For now, drive it over the API and keep the cookie jar:
+Open `/sign-in`, enter a development handle and click **Sign in locally**. This form
+exists only in development; production dev-provider requests return 404.
 
-```bash
-ORIGIN=http://localhost:3000
-CSRF=$(curl -sS -c alpha.cookies -b alpha.cookies $ORIGIN/api/auth/csrf | sed -E 's/.*"csrfToken":"([^"]+)".*/\1/')
-curl -sS -c alpha.cookies -b alpha.cookies -H "Origin: $ORIGIN" \
-  --data-urlencode "csrfToken=$CSRF" --data-urlencode "handle=alpha" --data-urlencode "json=true" \
-  $ORIGIN/api/auth/callback/dev
-```
+Use two browser profiles, or separate `localhost` and `127.0.0.1` origins, with different
+handles. Two tabs on the same origin share authentication and are not two players.
+Choose the same difficulty and queue both players. Both should reach the same lobby.
 
-Repeat with a second handle and jar to get an opponent. Then queue both:
+New real accounts go through handle selection, fair-play acceptance and five placements
+per difficulty. Development accounts skip that setup for match testing.
 
-```bash
-curl -sS -b alpha.cookies -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
-  -d '{"difficulty":"medium"}' $ORIGIN/api/queue
-```
-
-The second player's call returns `201` with a `matchId`.
+Practice lists published database problems. Guests can edit and keep drafts on their
+device; running Python requires sign-in and judges public tests only. Practice runs do
+not write ranked matches, submissions, placements or ratings.
 
 Every mutating request needs an `Origin` header. `src/proxy.ts` rejects cross-site
 mutations before a route can read a session cookie, so a bare `curl -X POST` gets a 403.
@@ -119,16 +117,16 @@ mutations before a route can read a session cookie, so a bare `curl -X POST` get
 
 ```bash
 docker compose -f docker-compose.local.yml down      # keeps your data
-docker compose -f docker-compose.local.yml down -v   # also wipes the volume
 ```
 
 ### Checks
 
 ```bash
+npx next typegen
 npx tsc --noEmit
 npm run lint
 npm run build
-npm test                                     # proxy rate-limit / memory-bound tests
+npm test                                     # proxy, HTTP transport and stored-run validation
 
 # Rating tests, plus the sandbox-escape tests if the runner image is built.
 docker compose -f docker-compose.judge.yml build judge-runner
@@ -173,8 +171,27 @@ Set `NEXT_PUBLIC_MOCK_API=0`, or drop the line, to talk to the real routes. The
 bundler reads the flag at build time and drops the half you are not using, so no
 mock code ships to production.
 
-Every network call goes through `src/lib/api-client.ts`. Nothing else in the
-browser calls `fetch`, which is what makes the flag a single switch.
+Application API calls go through `src/lib/api-client.ts` and its shared HTTP transport.
+`src/lib/mock-client.ts` provides simulated practice, placement and profile responses.
+Mock results do not execute Python or verify OAuth. Keep the mock flag unset for production.
+
+## Integration and deployment status
+
+Track D is on `track-d-client`; do not treat partial browser QA as release sign-off.
+See [Track D verification](docs/TRACK-D-VERIFICATION.md) for completed checks and remaining
+work. The disposable HTTP test stack runs PostgreSQL on 55432 and Next.js on 3011, separate
+from the normal local database.
+
+Production needs a separately operated PostgreSQL database and Docker judge host in
+addition to the web app. Configure `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`,
+`AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, a strong `AUTH_SECRET` and the deployed
+`NEXTAUTH_URL`. Register `/api/auth/callback/google` and `/api/auth/callback/github`
+under that exact origin. Real staging OAuth still needs provider credentials and a
+browser test; local provider-list checks do not replace it.
+
+Run `node test-support/track-d-production.mjs` against a production server on 3011 to
+check dev-auth rejection, server-rendered sign-in controls and nonce CSP. See
+[Backend operations](docs/BACKEND.md) for backups, restore limitations and load results.
 
 ## Learn More
 
@@ -184,9 +201,3 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
