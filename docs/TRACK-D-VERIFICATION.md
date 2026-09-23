@@ -122,3 +122,117 @@ node test-support/track-d-verify.mjs --advanced
 Migration mounts run automatically only for an empty PostgreSQL volume. For a non-test
 database, take a backup and confirm the intended Compose project before applying 011;
 do not delete its volume just to run migrations.
+
+## Manual refresh regression (2026-09-22)
+
+- User confirmed two local players signed in and reached the same lobby with
+  each other's handles.
+- User reported typing `print("hello world")` and a newline, then refreshing;
+  only `print` returned. The editor had only a three-second debounced server
+  save, leaving recent edits unprotected during refresh.
+- Added synchronous per-player/per-round session-storage backup on every edit,
+  restored after authenticated draft access and retried through server autosave.
+  Only an acknowledgement matching the cached source removes that backup.
+- All 18 unit tests, TypeScript, lint and diff checks pass. The immediate-refresh
+  browser retest was subsequently confirmed by the user: the full edited line
+  survives immediate refresh. User also confirmed submission locking, withheld
+  results until both submissions, and consistent final results across both players.
+
+## Practice usability follow-up (2026-09-23)
+
+- Added a per-player/per-problem persisted timer deadline. Refresh and time away
+  no longer restart the timer. Paused time is preserved; Reset starts ten minutes.
+  The timer is optional and reaching zero does not lock practice.
+- Replaced the problem dropdown with searchable cards, difficulty filters,
+  selected-state labels, and a clear-filters empty state. Filtering does not
+  discard or change the current editor's problem.
+- Added explicit function/stdio instructions and labeled input/expected-output
+  examples. Migration `012_clearer_problem_statements.sql` expands the original
+  14 terse statements with input/return rules and public-example explanations.
+  No tests, reference solutions, difficulty levels, or player records changed.
+- Applied migration 012 only to `codeduel-track-d-verification` (port 55432).
+  Other environments need this migration applied separately.
+- All 21 unit tests, TypeScript, lint, and diff checks passed. Browser confirmation
+  of the revised picker, timer refresh/pause/reset, and wording is still pending.
+
+## Catalog browsing follow-up (2026-09-23)
+
+- Current isolated catalog contains 17 published problems. Earlier practice
+  fetched full problem bodies and silently capped its picker at 100 entries.
+- Practice now requests 12 small catalog cards per page. Search covers titles,
+  slugs, function names, and task statements; cards show a task description.
+  Selecting a card fetches that problem's public detail separately. The old
+  `/api/problems` response remains available for existing clients.
+- Verified live HTTP search for “word” and “range”, page totals, public detail,
+  and absence of reference solutions. `npm test` (21), typegen, TypeScript,
+  lint, and diff checks passed. Browser feedback on the new picker is pending.
+
+## Editor indentation and topics (2026-09-23)
+
+- The shared Python editor preserves indentation on Enter and adds four spaces
+  after block headers or opening brackets. Comments and quoted colons do not
+  trigger extra indentation. Shift+Enter inserts a plain newline; Shift+Tab
+  still allows keyboard focus to leave the editor.
+- Migration 013 adds stored topic tags to all 17 published seed problems and
+  a GIN index for filtering. Applied only to the isolated verification DB;
+  other databases must apply 013 before serving the new catalog route.
+- Catalog cards show hashtags, with clickable topic filters above the list.
+  Search accepts plain topic names, exact hashtags, or multiple hashtags.
+  Mock catalog supports the same filters.
+- Live HTTP checks: #strings returns four problems, #arrays #sorting returns
+  Unique Sorted Values, and graphs returns Grid Shortest Path. All 25 tests,
+  TypeScript, lint, and diff checks pass. Browser interaction retest pending.
+
+## Optional stopwatch and saved practice progress
+
+- Supersedes the earlier countdown/pause/reset implementation. Signed-in users
+  choose Timed or Untimed before opening the exercise. Timing is stored on the
+  server and resumes across refreshes, tabs, and returning to a problem. Repeated
+  starts return the same active attempt with its original mode and start time.
+- A timed clock runs upward through time away, with no pause/reset. The first
+  accepted public-test submission freezes it at submission time, excluding judge
+  latency. A new attempt can be started after completion. Guest editing is untimed.
+- Per-problem statistics show timed completions, best time, and latest/previous
+  times. Untimed and unsuccessful attempts are excluded. These measure passing
+  public examples, not hidden-test correctness or a ranked skill estimate.
+- Applied migration 014 only to the verification DB. Deployment needs migrations
+  012–014 before these practice features are used.
+- `node test-support/practice-timing-verify.mjs` passed against the actual local
+  API and sandboxed judge: concurrent starts, no restart/mode change, owner
+  isolation, failure continuation, accepted completion, frozen elapsed time, and
+  exclusion of untimed completions. Test accounts use unique `timea`/`timeb` handles.
+- All 26 unit tests, route type generation, TypeScript and lint passed. Browser
+  interaction confirmation of the new start choices and saved statistics is pending.
+
+## One active timed attempt and comparable statistics
+
+- Migration 015 records abandonment and preserves the newest unfinished timed
+  attempt per player; two older test attempts were marked abandoned when applied
+  to the isolated DB. No attempt records were deleted. Other DBs need migration 015.
+- All practice starts and abandonment/submission operations use a per-player
+  transaction lock. A second timed problem is rejected, including simultaneous
+  starts from different tabs. Untimed practice on other problems remains available.
+- Switching offers Resume or an atomic Abandon-and-start action. Abandoned
+  attempts stay in history, freeze their clock, reject further submissions, and
+  are excluded from completion statistics even if an outstanding judge job later
+  passes. Standalone abandonment asks for confirmation in the page.
+- Statistics compare averages by difficulty and topic, separating first solves
+  from repeats. Any earlier accepted practice submission (including untimed or
+  legacy practice) makes a later timed solve a repeat. These measure public-test
+  completions, not hidden-test correctness.
+- Expanded `practice-timing-verify.mjs` passed against the actual API/judge:
+  cross-problem concurrent starts, unlimited concurrent untimed problems, atomic
+  switching, abandonment ownership/idempotency, blocked abandoned submissions,
+  untimed exclusion, and first/repeat difficulty/topic aggregation. TypeScript
+  and lint passed. Browser confirmation of the switching controls is pending.
+
+## Practice layout follow-up
+
+- Moved statistics out of the editor into a My stats tab beside Practice.
+  Tabs support arrow/Home/End keys; changing tabs preserves editor state and
+  does not pause or reset a timed attempt.
+- Completed/abandoned attempts now show a prominent next-step card above the
+  problem/editor, with timed, untimed, and choose-another-problem options. The
+  page moves focus and scrolls to that card when an attempt ends.
+- TypeScript, targeted lint, and diff checks passed. Visual browser confirmation
+  is pending with the user.

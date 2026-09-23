@@ -61,14 +61,14 @@ def update_rating(player: Rating, opponent: Rating, outcome: float) -> Rating:
 
 
 def visible_rank(mmr: float) -> tuple[str, str | None]:
-    """Thresholds are product-facing rank labels; numerical MMR remains server-only."""
+    """Thresholds are product-facing rank labels; numerical rating remains server-only."""
     bands = [
         (1000, "Bronze", "III"), (1100, "Bronze", "II"), (1200, "Bronze", "I"),
         (1300, "Silver", "III"), (1400, "Silver", "II"), (1500, "Silver", "I"),
         (1600, "Gold", "III"), (1700, "Gold", "II"), (1800, "Gold", "I"),
         (1900, "Platinum", "III"), (2000, "Platinum", "II"), (2100, "Platinum", "I"),
         (2200, "Diamond", "III"), (2300, "Diamond", "II"), (2400, "Diamond", "I"),
-        (2700, "Master Coder", None),
+        (2500, "Master Coder", None),
     ]
     for ceiling, tier, division in bands:
         if mmr < ceiling:

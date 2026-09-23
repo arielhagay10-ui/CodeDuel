@@ -33,6 +33,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/players
     handle: user.handle,
     ranks: ratings.rows.map((rating) => ({
       difficulty: rating.difficulty,
+      placementsCompleted: rating.placement_matches_completed,
       rank: rating.placement_matches_completed === 5 && rating.visible_tier ? { tier: rating.visible_tier, division: rating.visible_division } : null,
     })),
     recentMatches: matches.rows.map((match) => ({

@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from "react";
 
-const INDENT = "    ";
+import { insertPythonNewline, removePythonIndent, PYTHON_INDENT } from "@/lib/python-indent";
 
 type CodeEditorProps = {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   label: string;
+  spacious?: boolean;
 };
 
 /**
@@ -18,7 +19,7 @@ type CodeEditorProps = {
  * script host, so Monaco or CodeMirror would have to be bundled locally, and
  * neither buys anything this milestone needs.
  */
-export function CodeEditor({ value, onChange, disabled = false, label }: CodeEditorProps) {
+export function CodeEditor({ value, onChange, disabled = false, label, spacious = false }: CodeEditorProps) {
   const field = useRef<HTMLTextAreaElement>(null);
   const caret = useRef<number | null>(null);
 
@@ -39,14 +40,33 @@ export function CodeEditor({ value, onChange, disabled = false, label }: CodeEdi
       spellCheck="false"
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key === "Backspace") {
+          const { selectionStart, selectionEnd } = event.currentTarget;
+          const next = removePythonIndent(value, selectionStart, selectionEnd);
+          if (next) {
+            event.preventDefault();
+            caret.current = next.caret;
+            onChange(next.value);
+          }
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          const { selectionStart, selectionEnd } = event.currentTarget;
+          const next = insertPythonNewline(value, selectionStart, selectionEnd);
+          caret.current = next.caret;
+          onChange(next.value);
+          return;
+        }
         // Shift+Tab still moves focus, so the field is never a keyboard trap.
         if (event.key !== "Tab" || event.shiftKey) return;
         event.preventDefault();
         const { selectionStart, selectionEnd } = event.currentTarget;
-        caret.current = selectionStart + INDENT.length;
-        onChange(`${value.slice(0, selectionStart)}${INDENT}${value.slice(selectionEnd)}`);
+        caret.current = selectionStart + PYTHON_INDENT.length;
+        onChange(`${value.slice(0, selectionStart)}${PYTHON_INDENT}${value.slice(selectionEnd)}`);
       }}
-      className="min-h-72 flex-1 resize-none rounded-xl border border-white/10 bg-[#111] p-5 font-mono text-sm leading-7 text-[#e9e9e4] outline-none focus:border-[#ed5b39] disabled:opacity-70"
+      className={`block w-full min-w-0 rounded-xl border border-white/10 bg-[#111] p-5 font-mono text-sm leading-7 text-[#e9e9e4] outline-none focus:border-[#ed5b39] disabled:opacity-70 ${spacious ? "h-[60vh] min-h-96 resize-y" : "min-h-72 flex-1 resize-none"}`}
     />
   );
 }

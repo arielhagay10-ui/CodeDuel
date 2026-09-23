@@ -53,6 +53,53 @@ async function ensureDevUser(handle: string) {
     );
 
     if (existing.rowCount) {
+      await client.query(`
+        UPDATE user_difficulty_ratings AS rating SET mmr = CASE
+          WHEN visible_tier = 'Bronze' AND visible_division = 'III' THEN 900
+          WHEN visible_tier = 'Bronze' AND visible_division = 'II' THEN 1000
+          WHEN visible_tier = 'Bronze' AND visible_division = 'I' THEN 1100
+          WHEN visible_tier = 'Silver' AND visible_division = 'III' THEN 1200
+          WHEN visible_tier = 'Silver' AND visible_division = 'II' THEN 1300
+          WHEN visible_tier = 'Silver' AND visible_division = 'I' THEN 1400
+          WHEN visible_tier = 'Gold' AND visible_division = 'III' THEN 1500
+          WHEN visible_tier = 'Gold' AND visible_division = 'II' THEN 1600
+          WHEN visible_tier = 'Gold' AND visible_division = 'I' THEN 1700
+          WHEN visible_tier = 'Platinum' AND visible_division = 'III' THEN 1800
+          WHEN visible_tier = 'Platinum' AND visible_division = 'II' THEN 1900
+          WHEN visible_tier = 'Platinum' AND visible_division = 'I' THEN 2000
+          WHEN visible_tier = 'Diamond' AND visible_division = 'III' THEN 2100
+          WHEN visible_tier = 'Diamond' AND visible_division = 'II' THEN 2200
+          WHEN visible_tier = 'Diamond' AND visible_division = 'I' THEN 2300
+          WHEN visible_tier = 'Master Coder' THEN 2400
+          WHEN visible_tier = 'Grandmaster Coder' THEN 2500
+          ELSE mmr END
+        WHERE user_id = $1 AND placement_matches_completed = 5 AND mmr = 1500
+          AND NOT EXISTS (SELECT 1 FROM rating_events WHERE user_id = $1 AND difficulty = rating.difficulty)
+      `, [existing.rows[0].id]);
+      if (handle.toLowerCase() === "alpha") {
+        await client.query(`
+          UPDATE user_difficulty_ratings AS rating SET mmr = CASE
+            WHEN visible_tier = 'Bronze' AND visible_division = 'III' THEN 972
+            WHEN visible_tier = 'Bronze' AND visible_division = 'II' THEN 1072
+            WHEN visible_tier = 'Bronze' AND visible_division = 'I' THEN 1172
+            WHEN visible_tier = 'Silver' AND visible_division = 'III' THEN 1272
+            WHEN visible_tier = 'Silver' AND visible_division = 'II' THEN 1372
+            WHEN visible_tier = 'Silver' AND visible_division = 'I' THEN 1472
+            WHEN visible_tier = 'Gold' AND visible_division = 'III' THEN 1572
+            WHEN visible_tier = 'Gold' AND visible_division = 'II' THEN 1672
+            WHEN visible_tier = 'Gold' AND visible_division = 'I' THEN 1772
+            WHEN visible_tier = 'Platinum' AND visible_division = 'III' THEN 1872
+            WHEN visible_tier = 'Platinum' AND visible_division = 'II' THEN 1972
+            WHEN visible_tier = 'Platinum' AND visible_division = 'I' THEN 2072
+            WHEN visible_tier = 'Diamond' AND visible_division = 'III' THEN 2172
+            WHEN visible_tier = 'Diamond' AND visible_division = 'II' THEN 2272
+            WHEN visible_tier = 'Diamond' AND visible_division = 'I' THEN 2372
+            WHEN visible_tier = 'Master Coder' THEN 2472
+            ELSE mmr END
+          WHERE user_id = $1 AND difficulty = 'medium' AND placement_matches_completed = 5
+            AND NOT EXISTS (SELECT 1 FROM rating_events WHERE user_id = $1 AND difficulty = 'medium')
+        `, [existing.rows[0].id]);
+      }
       await client.query("COMMIT");
       return existing.rows[0].id;
     }
@@ -63,8 +110,8 @@ async function ensureDevUser(handle: string) {
       [userId, handle],
     );
     await client.query(
-      `INSERT INTO user_difficulty_ratings (user_id, difficulty, placement_matches_completed, visible_tier, visible_division)
-       VALUES ($1, 'easy', 5, 'Bronze', 'II'), ($1, 'medium', 5, 'Silver', 'II'), ($1, 'advanced', 5, 'Bronze', 'III')`,
+      `INSERT INTO user_difficulty_ratings (user_id, difficulty, mmr, placement_matches_completed, visible_tier, visible_division)
+       VALUES ($1, 'easy', 1072, 5, 'Bronze', 'II'), ($1, 'medium', 1372, 5, 'Silver', 'II'), ($1, 'advanced', 972, 5, 'Bronze', 'III')`,
       [userId],
     );
     await client.query("COMMIT");

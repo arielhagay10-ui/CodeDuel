@@ -28,9 +28,9 @@ An active round locks each player to one submission. Results are not resolved or
 
 ## Rating architecture
 
-Each completed ranked match creates exactly one immutable `rating_events` row per player. The private worker applies Glicko-2 independently for Easy, Medium, and Advanced using the stored MMR, rating deviation, and volatility. Five matches remain placements; only after the fifth event does the worker write the visible tier/division. Client-facing rating APIs return placement progress and rank labels only—never numerical MMR, deviation, or volatility.
+Each completed ranked match creates exactly one immutable `rating_events` row per player. The private worker uses Glicko-2 for placements and ranked matches, updating rating, deviation, and volatility independently for Easy, Medium, and Advanced. The visible divisions map to 100-point rating bands. Glicko-2 adjusts for opponent strength and rating uncertainty; no separate streak bonus is added. Client-facing rating APIs return placement progress, bounded progress within the current division, and rank labels only—never the full rating, deviation, or volatility.
 
-Placement challenges use the same private judge queue. The current solo-placement UI calibrates a difficulty's Glicko-2 state against a fixed benchmark from the hidden-test result; no rating event is created because there is no opponent. After the fifth completed attempt, the visible rank is assigned.
+Placement challenges use the same private judge queue. The current solo-placement UI calibrates a difficulty's starting score with Glicko-2 against a fixed benchmark from the hidden-test result; no rating event is created because there is no opponent. After the fifth completed attempt, the visible rank is assigned.
 
 ## Moderation, presence, and forfeits
 

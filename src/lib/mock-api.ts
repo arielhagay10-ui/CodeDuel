@@ -281,6 +281,7 @@ function toQueueState(current: MockState): QueueState {
     ...(current.queue.difficulty ? { difficulty: current.queue.difficulty } : {}),
     ...(current.queue.queuedAt !== null ? { queuedAt: iso(current.queue.queuedAt) } : {}),
     matchId: current.match?.id ?? null,
+    population: (["easy", "medium", "advanced"] as Difficulty[]).map((difficulty) => ({ difficulty, playersSearching: current.queue.status === "queued" && current.queue.difficulty === difficulty ? 1 : 0, recentMedianWaitSeconds: null })),
   };
 }
 

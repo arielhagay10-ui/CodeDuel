@@ -110,6 +110,7 @@ def resolve_placement_if_ready(conn, submission_id, result):
     score = result["tests_passed"] / max(1, result["tests_total"])
     outcome = 1.0 if score == 1.0 else 0.5 if score >= 0.5 else 0.0
     after = update_rating(before, Rating(1500.0, 350.0, 0.06), outcome)
+    after = Rating(max(900.0, after.mmr), after.deviation, after.volatility)
     placements = min(5, int(attempt["placement_matches_completed"]) + 1)
     tier, division = visible_rank(after.mmr)
     conn.execute("""
@@ -174,7 +175,7 @@ def apply_match_ratings(conn, match_id, winner_id):
         return
     match = conn.execute("SELECT difficulty, player_one_id, player_two_id FROM matches WHERE id = %s FOR UPDATE", (match_id,)).fetchone()
     ratings = conn.execute("""
-      SELECT user_id, mmr, rating_deviation, volatility, placement_matches_completed
+      SELECT user_id, mmr, rating_deviation, volatility, placement_matches_completed, visible_tier, visible_division
       FROM user_difficulty_ratings WHERE difficulty = %s AND user_id IN (%s, %s) FOR UPDATE
     """, (match["difficulty"], match["player_one_id"], match["player_two_id"])).fetchall()
     by_user = {row["user_id"]: row for row in ratings}
@@ -188,6 +189,7 @@ def apply_match_ratings(conn, match_id, winner_id):
         before = Rating(float(player["mmr"]), float(player["rating_deviation"]), float(player["volatility"]))
         opponent_before = Rating(float(opponent["mmr"]), float(opponent["rating_deviation"]), float(opponent["volatility"]))
         after = update_rating(before, opponent_before, outcome)
+        after = Rating(max(900.0, after.mmr), after.deviation, after.volatility)
         placements = min(5, int(player["placement_matches_completed"]) + 1)
         tier, division = visible_rank(after.mmr)
         conn.execute("""

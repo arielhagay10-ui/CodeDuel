@@ -96,16 +96,30 @@ export async function POST(request: Request) {
 export async function GET() {
   const { userId, error } = await requireRankedUser();
   if (error) return error;
+  const population = await getDb().query<{ difficulty: Difficulty; players_searching: number; recent_median_wait_seconds: number | null }>(`
+    SELECT d.difficulty,
+      (SELECT count(*)::int FROM match_queue_entries q
+       WHERE q.difficulty = d.difficulty AND q.cancelled_at IS NULL AND q.matched_at IS NULL) AS players_searching,
+      (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (q.matched_at - q.enqueued_at)))
+       FROM match_queue_entries q
+       WHERE q.difficulty = d.difficulty AND q.matched_at >= now() - interval '24 hours') AS recent_median_wait_seconds
+    FROM unnest(ARRAY['easy'::difficulty, 'medium'::difficulty, 'advanced'::difficulty]) AS d(difficulty)
+  `);
+  const queuePopulation = population.rows.map((row) => ({
+    difficulty: row.difficulty,
+    playersSearching: row.players_searching,
+    recentMedianWaitSeconds: row.recent_median_wait_seconds === null ? null : Math.round(row.recent_median_wait_seconds),
+  }));
   const match = await getDb().query<{ id: string; difficulty: Difficulty }>(
     "SELECT id,difficulty FROM matches WHERE $1 IN (player_one_id,player_two_id) AND status IN ('waiting','active','between_rounds') ORDER BY created_at DESC LIMIT 1", [userId],
   );
-  if (match.rowCount) return NextResponse.json({ status: "matched", matchId: match.rows[0].id, difficulty: match.rows[0].difficulty });
+  if (match.rowCount) return NextResponse.json({ status: "matched", matchId: match.rows[0].id, difficulty: match.rows[0].difficulty, population: queuePopulation });
   const entry = await getDb().query<{ id: string; difficulty: Difficulty; enqueued_at: string; match_id: string | null }>(
     "SELECT id, difficulty, enqueued_at, match_id FROM match_queue_entries WHERE user_id = $1 AND cancelled_at IS NULL AND matched_at IS NULL ORDER BY enqueued_at DESC LIMIT 1",
     [userId],
   );
-  if (!entry.rowCount) return NextResponse.json({ status: "idle" });
-  return NextResponse.json({ queueEntryId: entry.rows[0].id, difficulty: entry.rows[0].difficulty, queuedAt: entry.rows[0].enqueued_at, matchId: entry.rows[0].match_id, status: entry.rows[0].match_id ? "matched" : "queued" });
+  if (!entry.rowCount) return NextResponse.json({ status: "idle", population: queuePopulation });
+  return NextResponse.json({ queueEntryId: entry.rows[0].id, difficulty: entry.rows[0].difficulty, queuedAt: entry.rows[0].enqueued_at, matchId: entry.rows[0].match_id, status: entry.rows[0].match_id ? "matched" : "queued", population: queuePopulation });
 }
 
 export async function DELETE() {

@@ -15,7 +15,7 @@ import type {
   SubmitResult,
   PlacementState, PlayerProfile, PracticeRun, RatingsSummary, RoundProblem,
 } from "@/types/api";
-import type { AccountState, PlacementAttempt } from "@/lib/client-contracts";
+import type { AccountState, PlacementAttempt, ProblemCatalogPage, PracticeSession, PracticeSessionState } from "@/lib/client-contracts";
 import { ApiRequestError } from "@/lib/api-error";
 import { request } from "@/lib/http-client";
 
@@ -45,13 +45,18 @@ export type ClientExtras = {
   acceptFairPlay(): Promise<void>;
   getMe(): Promise<AccountState>;
   getProblems(): Promise<{ problems: RoundProblem[] }>;
+  getProblemCatalog(search: string, difficulty: Difficulty | "all", page: number): Promise<ProblemCatalogPage>;
+  getProblem(id: string): Promise<RoundProblem>;
   getProfile(handle: string): Promise<PlayerProfile>;
   getRatings(): Promise<RatingsSummary>;
   getPlacements(): Promise<PlacementState>;
   startPlacement(difficulty: Difficulty): Promise<{ attempt: { id: string } }>;
   getPlacement(id: string): Promise<PlacementAttempt>;
   submitPlacement(id: string, sourceCode: string): Promise<SubmitResult>;
-  runPractice(problemSlug: string, sourceCode: string): Promise<PracticeRun>;
+  getPracticeSession(problemId: string): Promise<PracticeSessionState>;
+  startPracticeSession(problemId: string, timed: boolean, abandonSessionId?: string): Promise<PracticeSession>;
+  abandonPracticeSession(sessionId: string): Promise<void>;
+  runPractice(problemSlug: string, sourceCode: string, sessionId?: string): Promise<PracticeRun>;
   getPractice(id: string): Promise<PracticeRun>;
   presence(id: string, connected: boolean): Promise<{ connected: boolean }>;
   report(id: string, category: string, details: string): Promise<void>;
@@ -62,13 +67,18 @@ const liveApi: MatchApi & ClientExtras = {
   acceptFairPlay: () => request("/api/onboarding/fair-play", json({})),
   getMe: () => request("/api/me"),
   getProblems: () => request("/api/problems"),
+  getProblemCatalog: (search, difficulty, page) => request(`/api/problems/catalog?q=${encodeURIComponent(search)}&difficulty=${difficulty}&page=${page}`),
+  getProblem: id => request(`/api/problems/${encodeURIComponent(id)}`),
   getProfile: handle => request(`/api/players/${encodeURIComponent(handle)}`),
   getRatings: () => request("/api/ratings/me"),
   getPlacements: () => request("/api/placements"),
   startPlacement: difficulty => request("/api/placements", json({ difficulty })),
   getPlacement: id => request(`/api/placements/${encodeURIComponent(id)}`),
   submitPlacement: (id, sourceCode) => request(`/api/placements/${encodeURIComponent(id)}/submissions`, json({ sourceCode })),
-  runPractice: (problemSlug, sourceCode) => request("/api/practice/runs", json({ problemSlug, sourceCode })),
+  getPracticeSession: problemId => request(`/api/practice/sessions?problemId=${encodeURIComponent(problemId)}`),
+  startPracticeSession: (problemId, timed, abandonSessionId) => request("/api/practice/sessions", json({ problemId, timed, abandonSessionId })),
+  abandonPracticeSession: sessionId => request("/api/practice/sessions", { ...json({sessionId}), method:"PATCH" }),
+  runPractice: (problemSlug, sourceCode, sessionId) => request("/api/practice/runs", json({ problemSlug, sourceCode, sessionId })),
   getPractice: id => request(`/api/practice/runs/${encodeURIComponent(id)}`),
   presence: (id, connected) => request(`/api/matches/${id}/presence`, { ...json({ connected }), keepalive: true }),
   report: (id, category, details) => request(`/api/matches/${id}/reports`, json({ category, details })),

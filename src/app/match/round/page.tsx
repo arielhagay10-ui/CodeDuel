@@ -9,6 +9,7 @@ import { Markdown } from "@/components/markdown";
 import { ApiRequestError, api } from "@/lib/api-client";
 import { useMatchState, useRoundState } from "@/lib/hooks/use-match";
 import { difficultyLabel, formatClock, formatExample, matchFormatLabel } from "@/lib/match-view";
+import { acknowledgeDraft, readPendingDraft, roundDraftKey, writePendingDraft } from "@/lib/round-draft-storage";
 
 const AUTOSAVE_MS = 3_000;
 
@@ -29,6 +30,7 @@ function MatchRoundContent() {
   const [submitting, setSubmitting] = useState(false);
   const [loadedRound, setLoadedRound] = useState<string | null>(null);
   const codeRef = useRef<string | null>(null);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
 
   const problem = round?.problem ?? null;
   const starterCode = problem?.starterCode ?? null;
@@ -42,9 +44,19 @@ function MatchRoundContent() {
   useEffect(() => {
     if (!roundId || starterCode === null || loadedRound === roundId) return;
     let cancelled = false;
-    void api
-      .getDraft(roundId)
-      .then((draft) => { if (!cancelled) { setLoadedRound(roundId); codeRef.current=draft.sourceCode??starterCode; setCode(codeRef.current); } })
+    void Promise.all([api.getDraft(roundId), api.getMe()])
+      .then(([draft, account]) => {
+        if (cancelled) return;
+        if (!account.user) throw new Error("Sign in to restore your draft.");
+        const key = roundDraftKey(account.user.id, roundId);
+        let pending: string | null = null;
+        try { pending = readPendingDraft(window.sessionStorage, key); } catch { /* Storage can be disabled. */ }
+        setDraftKey(key);
+        setLoadedRound(roundId);
+        codeRef.current = pending ?? draft.sourceCode ?? starterCode;
+        setCode(codeRef.current);
+        setSaveState(pending === null ? "idle" : "pending");
+      })
       .catch(() => { if (!cancelled) { setNotice("Could not restore your draft. Refresh to retry; editing is disabled to protect saved work."); } });
     return () => { cancelled = true; };
   }, [roundId, starterCode, loadedRound]);
@@ -52,15 +64,18 @@ function MatchRoundContent() {
   // The worker submits the last *saved* draft when the timer expires, so an
   // unsaved buffer at 0:00 means the player's real work is thrown away.
   useEffect(() => {
-    if (saveState !== "pending" || !roundId || code === null || locked) return;
+    if (saveState !== "pending" || !roundId || loadedRound !== roundId || code === null || locked) return;
     const timer = window.setTimeout(() => {
       void api
         .saveDraft(roundId, code)
-        .then(() => { if(codeRef.current===code)setSaveState("saved"); })
+        .then(() => {
+          try { if (draftKey) acknowledgeDraft(window.sessionStorage, draftKey, code); } catch { /* Optional storage. */ }
+          if(codeRef.current===code)setSaveState("saved");
+        })
         .catch(() => { if(codeRef.current===code)setSaveState("failed"); });
     }, AUTOSAVE_MS);
     return () => window.clearTimeout(timer);
-  }, [code, locked, roundId, saveState]);
+  }, [code, locked, roundId, loadedRound, draftKey, saveState]);
 
   // Results stay hidden until both judge jobs finish. When they do, this page is done.
   useEffect(() => {
@@ -176,7 +191,14 @@ function MatchRoundContent() {
             label="Match code editor"
             value={code}
             disabled={locked || expired}
-            onChange={(next) => { codeRef.current=next; setCode(next); setSaveState("pending"); }}
+            onChange={(next) => {
+              codeRef.current = next;
+              setCode(next);
+              setSaveState("pending");
+              let backedUp = false;
+              try { if (draftKey) backedUp = writePendingDraft(window.sessionStorage, draftKey, next); } catch { /* Optional storage. */ }
+              if (!backedUp) setNotice("Browser backup is unavailable. Wait for Saved before refreshing.");
+            }}
           />
 
           {notice && <p className="mt-4 rounded-xl border border-[#f3a08c] bg-[#3a1b13] p-4 text-sm text-[#f8d4c9]">{notice}</p>}

@@ -150,6 +150,7 @@ export type QueueState = {
   /** ISO timestamp. */
   queuedAt?: string;
   matchId?: string | null;
+  population?: { difficulty: Difficulty; playersSearching: number; recentMedianWaitSeconds: number | null }[];
 };
 
 type VisibleRank = { tier: string; division: string | null };
@@ -157,7 +158,7 @@ type VisibleRank = { tier: string; division: string | null };
 /** `GET /api/players/[handle]` — only public, visible player data. */
 export type PlayerProfile = {
   handle: string;
-  ranks: { difficulty: Difficulty; rank: VisibleRank | null }[];
+  ranks: { difficulty: Difficulty; placementsCompleted: number; rank: VisibleRank | null }[];
   recentMatches: {
     id: string;
     difficulty: Difficulty;
@@ -173,6 +174,7 @@ export type RatingsSummary = {
     difficulty: Difficulty;
     placementsCompleted: number;
     rank: VisibleRank | null;
+    rankProgressPoints: number | null;
   }[];
 };
 
